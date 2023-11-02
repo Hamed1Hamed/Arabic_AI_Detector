@@ -10,16 +10,18 @@ import torch
 from torch.utils.data import DataLoader
 import os
 logging.basicConfig(filename='classifier.log', level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
-
+import json
 class ArabicTextClassifier:
    # classifier = ArabicTextClassifier(model=model, tokenizer=tokenizer, model_name=model_name, num_labels=2, epochs=epochs, learning_rate=learning_rate)
 
-    def __init__(self, model, tokenizer, model_name, num_labels, epochs, learning_rate):
-
+    def __init__(self, model, tokenizer, model_name, num_labels, epochs, learning_rate, patience):
+        with open('config.json', 'r') as config_file:
+            config = json.load(config_file)
         # Setup logging
         self.logger = logging.getLogger(__name__)
         self.logger.info('Initializing the ArabicTextClassifier.')
-
+        self.checkpoint_path = config["checkpoint_path"]  # ensure this config key exists
+        self.patience = patience
         # Model setup
         if model is not None:
             self.model = model
@@ -77,7 +79,27 @@ class ArabicTextClassifier:
         self.evaluation_accuracies = []
 
 
-#----------------------------------------------------------------Training and Evaluation Functions-------------------------------------------------------------
+    def save_checkpoint(self, epoch):
+        # Make sure the checkpoint directory exists
+        os.makedirs(self.checkpoint_path, exist_ok=True)
+
+        # Save the model checkpoint
+        model_checkpoint_path = os.path.join(self.checkpoint_path, f"model_epoch_{epoch}.pt")
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            # Add any other states you want to save, e.g., scheduler
+        }, model_checkpoint_path)
+
+        # Save the tokenizer
+        tokenizer_checkpoint_path = os.path.join(self.checkpoint_path, f"tokenizer_epoch_{epoch}")
+        self.tokenizer.save_pretrained(tokenizer_checkpoint_path)
+
+        self.logger.info(f"Model checkpoint and tokenizer saved at {self.checkpoint_path} for epoch {epoch}")
+
+
+    #----------------------------------------------------------------Training and Evaluation Functions-------------------------------------------------------------
     def train(self, train_loader, val_loader, start_epoch=0):
         best_val_loss = float('inf')
         epochs_without_improvement = 0  # Counter for early stopping
@@ -135,10 +157,10 @@ class ArabicTextClassifier:
             if scheduler is not None:
                 scheduler.step()
 
-            if len(train_loader) > 0:
-                avg_train_loss = total_train_loss / len(train_loader)
-                train_accuracy = correct_train_preds / max(total_train_preds, 1)
-                self.logger.info(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Train Acc: {train_accuracy}")
+            # Calculate average train loss and accuracy
+            avg_train_loss = total_train_loss / len(train_loader)
+            train_accuracy = correct_train_preds / max(total_train_preds, 1)
+            self.logger.info(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Train Acc: {train_accuracy}")
 
             # Validation step
             self.model.eval()
@@ -181,13 +203,12 @@ class ArabicTextClassifier:
                 val_accuracy = correct_val_preds / max(total_val_preds, 1)
                 self.logger.info(f"Epoch {epoch + 1}, Val Loss: {avg_val_loss}, Val Acc: {val_accuracy}")
 
+            # Checkpoint and early stopping
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 epochs_without_improvement = 0
                 # Implement checkpoint saving if desired
-                torch.save(self.model.state_dict(), f"{self.checkpoint_path}/model_epoch_{epoch + 1}.pt")
-                self.tokenizer.save_pretrained(self.checkpoint_path)
-                # You might also want to save the optimizer state, scheduler state, and current epoch.
+                self.save_checkpoint(epoch)  # Save the checkpoint for the current epoch
 
             else:
                 epochs_without_improvement += 1
@@ -196,7 +217,7 @@ class ArabicTextClassifier:
                 self.logger.info("Early stopping triggered.")
                 break
 
-            # Append the metrics to their respective lists
+            # Metrics recording. Append the metrics to their respective lists
             self.train_losses.append(avg_train_loss)
             self.val_losses.append(avg_val_loss)
             self.train_accuracies.append(train_accuracy)
@@ -209,117 +230,6 @@ class ArabicTextClassifier:
         self.logger.info(f'Final model and tokenizer saved at {final_model_path}.')
 
         self.logger.info('Training process has ended.')
-
-        # def train(self, train_loader, val_loader, start_epoch=0):
-        #     best_val_loss = float('inf')
-        #     epochs_without_improvement = 0  # Counter for early stopping
-        #
-        #     if not isinstance(train_loader, DataLoader) or not isinstance(val_loader, DataLoader):
-        #         raise TypeError("train_loader and val_loader must be DataLoader instances.")
-        #
-        #     # Initialize the scheduler
-        #     scheduler = CosineAnnealingLR(self.optimizer, T_max=len(train_loader) * self.epochs)
-        #     self.logger.info('Training process started.')
-        #
-        #     for epoch in range(start_epoch, self.epochs):
-        #         self.model.train()
-        #         total_train_loss = 0
-        #         correct_train_preds = 0
-        #         total_train_preds = 0
-        #
-        #         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{self.epochs}", leave=True)
-        #
-        #         for batch in progress_bar:
-        #             inputs, labels = batch
-        #             inputs = {k: v.to(self.device) for k, v in inputs.items()}
-        #             labels = labels.to(self.device)
-        #             inputs['labels'] = labels  # Add 'labels' to the inputs dictionary for loss computation
-        #
-        #             self.optimizer.zero_grad()
-        #
-        #             outputs = self.model(**inputs)
-        #             loss = outputs.loss
-        #
-        #             # Check if the loss is not None and is a scalar tensor
-        #             if loss is None:
-        #                 self.logger.error("Loss is None. Check model outputs and loss computation.")
-        #                 continue  # Skip this batch
-        #             else:
-        #                 # Try to get the scalar value of the loss
-        #                 try:
-        #                     loss_value = loss.item()
-        #                 except AttributeError:
-        #                     self.logger.error(f"Loss computation failed, got {type(loss)} instead of a tensor.")
-        #                     continue  # Skip this batch or use a break to stop training
-        #
-        #                 total_train_loss += loss_value
-        #                 progress_bar.set_postfix(loss=loss_value, accuracy=(correct_train_preds / total_train_preds))
-        #
-        #             loss.backward()
-        #             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-        #             self.optimizer.step()
-        #
-        #             if scheduler is not None:
-        #                 scheduler.step()
-        #
-        #             logits = outputs.logits
-        #             predictions = torch.argmax(logits, dim=-1)
-        #             correct_train_preds += torch.sum(predictions == labels).item()
-        #             total_train_preds += labels.size(0)
-        #
-        #         avg_train_loss = total_train_loss / len(train_loader)
-        #         train_accuracy = correct_train_preds / total_train_preds
-        #         self.logger.info(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Train Acc: {train_accuracy}")
-        #
-        #         # Validation step
-        #         self.model.eval()
-        #         total_val_loss = 0
-        #         correct_val_preds = 0
-        #         total_val_preds = 0
-        #
-        #         with torch.no_grad():
-        #             for batch in val_loader:
-        #                 inputs, labels = batch
-        #                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
-        #                 labels = labels.to(self.device)
-        #
-        #                 outputs = self.model(**inputs)
-        #                 loss = outputs.loss
-        #                 total_val_loss += loss.item()
-        #
-        #                 logits = outputs.logits
-        #                 _, predicted = torch.max(logits, dim=1)
-        #                 correct_val_preds += (predicted == labels).sum().item()
-        #                 total_val_preds += labels.size(0)
-        #
-        #         avg_val_loss = total_val_loss / len(val_loader)
-        #         val_accuracy = correct_val_preds / total_val_preds
-        #         self.logger.info(f"Epoch {epoch + 1}, Val Loss: {avg_val_loss}, Val Acc: {val_accuracy}")
-        #
-        #         if avg_val_loss < best_val_loss:
-        #             best_val_loss = avg_val_loss
-        #             epochs_without_improvement = 0
-        #             # Implement checkpoint saving if desired
-        #         else:
-        #             epochs_without_improvement += 1
-        #
-        #         if epochs_without_improvement >= self.patience:
-        #             self.logger.info("Early stopping triggered.")
-        #             break
-        #
-        #         # Append the metrics to their respective lists
-        #         self.train_losses.append(avg_train_loss)
-        #         self.val_losses.append(avg_val_loss)
-        #         self.train_accuracies.append(train_accuracy)
-        #         self.val_accuracies.append(val_accuracy)
-        #
-        #     # Save the final model and tokenizer
-        #     final_model_path = './model_final_save/'
-        #     self.model.save_pretrained(final_model_path)
-        #     self.tokenizer.save_pretrained(final_model_path)
-        #     self.logger.info(f'Final model and tokenizer saved at {final_model_path}.')
-        #
-        #     self.logger.info('Training process has ended.')
 
 
     def evaluate(self, val_loader):

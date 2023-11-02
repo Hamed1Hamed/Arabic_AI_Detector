@@ -40,6 +40,7 @@ def main():
     learning_rate = config['learning_rate']
     epochs = config['epochs']
     batch_size = config['batch_size']
+    patience = config['patience']
 
 
     model_path = config['final_model_path']  # or another path where the pretrained model is expected to be
@@ -68,7 +69,7 @@ def main():
 
 
     # Initialize the classifier
-    classifier = ArabicTextClassifier(model=model, tokenizer=tokenizer, model_name=model_name, num_labels=2, epochs=epochs, learning_rate=learning_rate)
+    classifier = ArabicTextClassifier(model=model, tokenizer=tokenizer, model_name=model_name, num_labels=2, epochs=epochs, learning_rate=learning_rate, patience=patience)
 
     # Train the model
     try:
