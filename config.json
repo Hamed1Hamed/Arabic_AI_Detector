@@ -6,6 +6,7 @@
     "root_folder": "./Dataset",
     "model_save_path": "saved_model",
     "final_model_path": "model_final_save",
-    "checkpoint_path": "model_checkpoints"
+    "checkpoint_path": "model_checkpoints",
+    "patience": 10
 }
 
