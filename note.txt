@@ -1,0 +1,12 @@
+pip install -r requirements.txt
+
+potential needed libraries:
+transformers
+torch
+scikit-learn
+matplotlib
+pandas
+tqdm
+numpy
+requests
+black

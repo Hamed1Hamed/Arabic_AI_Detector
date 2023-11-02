@@ -1,0 +1,11 @@
+{
+    "learning_rate": 0.001,
+    "model_name": "aubmindlab/bert-base-arabert",
+    "epochs": 50,
+    "batch_size": 64,
+    "root_folder": "./Dataset",
+    "model_save_path": "saved_model",
+    "final_model_path": "model_final_save",
+    "checkpoint_path": "model_checkpoints"
+}
+
