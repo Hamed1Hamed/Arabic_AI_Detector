@@ -90,7 +90,7 @@ class ArabicTextClassifier:
         self.logger.info('Training process started.')
 
         for epoch in range(start_epoch, self.epochs):
-            self.model.train()
+            self.model.train() # begin training
             total_train_loss = 0
             correct_train_preds = 0
             total_train_preds = 0
@@ -119,8 +119,7 @@ class ArabicTextClassifier:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 self.optimizer.step()
 
-                if scheduler is not None:
-                    scheduler.step()
+
 
                 logits = outputs.logits
                 predictions = torch.argmax(logits, dim=-1)
@@ -132,6 +131,9 @@ class ArabicTextClassifier:
                     progress_bar.set_postfix(loss=loss_value, accuracy=train_accuracy)
                 else:
                     progress_bar.set_postfix(loss=loss_value, accuracy=0.0)
+
+            if scheduler is not None:
+                scheduler.step()
 
             if len(train_loader) > 0:
                 avg_train_loss = total_train_loss / len(train_loader)
@@ -152,6 +154,21 @@ class ArabicTextClassifier:
 
                     outputs = self.model(**inputs)
                     loss = outputs.loss
+
+                    # Add a check here
+                    if loss is None:
+                        self.logger.error(f"Loss is None. Outputs: {outputs} Inputs: {inputs} Labels: {labels}")
+                        continue  # Skip this batch
+
+                    if not torch.is_tensor(loss):
+                        self.logger.error(f"Loss is not a tensor. Loss: {loss}")
+                        continue  # Skip this batch
+
+                    if loss.numel() != 1:
+                        self.logger.error(f"Loss does not have a single element. Loss: {loss}")
+                        continue  # Skip this batch
+
+                    # Now it's safe to call loss.item() because you've checked loss is not None and is a tensor with a single element
                     total_val_loss += loss.item()
 
                     logits = outputs.logits
@@ -168,6 +185,10 @@ class ArabicTextClassifier:
                 best_val_loss = avg_val_loss
                 epochs_without_improvement = 0
                 # Implement checkpoint saving if desired
+                torch.save(self.model.state_dict(), f"{self.checkpoint_path}/model_epoch_{epoch + 1}.pt")
+                self.tokenizer.save_pretrained(self.checkpoint_path)
+                # You might also want to save the optimizer state, scheduler state, and current epoch.
+
             else:
                 epochs_without_improvement += 1
 
