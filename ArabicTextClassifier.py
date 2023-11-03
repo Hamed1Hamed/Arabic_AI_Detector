@@ -14,14 +14,14 @@ import json
 class ArabicTextClassifier:
    # classifier = ArabicTextClassifier(model=model, tokenizer=tokenizer, model_name=model_name, num_labels=2, epochs=epochs, learning_rate=learning_rate)
 
-    def __init__(self, model, tokenizer, model_name, num_labels, epochs, learning_rate, patience):
+    def __init__(self, model, tokenizer, model_name, num_labels, epochs, learning_rate):
         with open('config.json', 'r') as config_file:
             config = json.load(config_file)
         # Setup logging
         self.logger = logging.getLogger(__name__)
         self.logger.info('Initializing the ArabicTextClassifier.')
         self.checkpoint_path = config["checkpoint_path"]  # ensure this config key exists
-        self.patience = patience
+        # self.patience = patience
         # Model setup
         if model is not None:
             self.model = model
@@ -213,9 +213,9 @@ class ArabicTextClassifier:
             else:
                 epochs_without_improvement += 1
 
-            if epochs_without_improvement >= self.patience:
-                self.logger.info("Early stopping triggered.")
-                break
+            # if epochs_without_improvement >= self.patience:
+            #     self.logger.info("Early stopping triggered.")
+            #     break
 
             # Metrics recording. Append the metrics to their respective lists
             self.train_losses.append(avg_train_loss)
