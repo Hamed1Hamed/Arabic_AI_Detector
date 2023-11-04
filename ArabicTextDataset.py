@@ -82,11 +82,22 @@ class ArabicTextDataset(Dataset):
             df = pd.read_excel(file_path)
             # Assuming that the dataframe has two columns: 'text' for the review and 'label' for the sentiment
             for index, row in df.iterrows():
-                text = preprocess_arabic(row['text'])  # Replace 'text' with the actual column name for your text data
+                text = row['text']  # Directly use the text without preprocessing
                 label = int(row['label'])  # Replace 'label' with the actual column name for your labels
                 self.samples.append((text, label))
         except Exception as e:
             raise IOError(f"Error reading the Excel file: {e}")
+
+    # def _load_excel(self, file_path):
+    #     try:
+    #         df = pd.read_excel(file_path)
+    #         # Assuming that the dataframe has two columns: 'text' for the review and 'label' for the sentiment
+    #         for index, row in df.iterrows():
+    #             text = preprocess_arabic(row['text'])  # Replace 'text' with the actual column name for your text data
+    #             label = int(row['label'])  # Replace 'label' with the actual column name for your labels
+    #             self.samples.append((text, label))
+    #     except Exception as e:
+    #         raise IOError(f"Error reading the Excel file: {e}")
 
     def __len__(self):
         return len(self.samples)
