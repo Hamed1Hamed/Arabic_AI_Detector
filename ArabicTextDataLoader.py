@@ -24,9 +24,11 @@ class ArabicTextDataLoader:
         # Creating data loaders and logging the process
         logging.info("Creating data loaders with appropriate batch size and shuffle parameters")
 
-        train_loader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=False)
-        val_loader = DataLoader(self.val_dataset, batch_size=self.batch_size)
-        test_loader = DataLoader(self.test_dataset, batch_size=self.batch_size)  # test loader added
+        train_loader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
+        val_loader = DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False)
+        test_loader = DataLoader(self.test_dataset, batch_size=self.batch_size,shuffle=False)  # Typically, we do not shuffle the test set
+
+
 
         return train_loader, val_loader, test_loader  # return all three loaders
 
