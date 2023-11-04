@@ -24,8 +24,8 @@ def preprocess_arabic(text):
     text = re.sub("گ", "ك", text)
     text = re.sub("[ﻷﻵﻹﻻ]", "لا", text)
     #text = re.sub(r'[^ا-ي0-9\s]', '', text)  # Remove all non-Arabic-characters and non-digits
-    text = re.sub(r'\s+', ' ', text) # Remove extra spaces
-    return text.strip()
+    #text = re.sub(r'\s+', ' ', text) # Remove extra spaces
+    return text.rstrip()
 
 
 # Define the mapping from data_type to CSV filenames
