@@ -173,6 +173,7 @@ class ArabicTextClassifier:
                     inputs, labels = batch
                     inputs = {k: v.to(self.device) for k, v in inputs.items()}
                     labels = labels.to(self.device)
+                    inputs['labels'] = labels  # Include this line to ensure the model calculates loss
 
                     outputs = self.model(**inputs)
                     loss = outputs.loss
@@ -233,86 +234,67 @@ class ArabicTextClassifier:
 
 
     def evaluate(self, val_loader):
-            # Validate the provided val_loader
-            self.logger.info('Evaluation process started.')  # New log entry
+        self.model.eval()
+        y_true = []
+        y_pred = []
+        correct_preds = 0
+        total_preds = 0
 
-            self.model.eval()
-            y_true = []
-            y_pred = []
-            val_loss = 0.0  # Use this variable consistently for accumulating loss
-            correct_preds = 0  # Accumulate correct predictions
-            total_preds = 0  # Accumulate total predictions
+        # Storage for evaluation metrics if they don't already exist
+        if not hasattr(self, 'evaluation_accuracies'):
+            self.evaluation_accuracies = []
 
-            # New storage for evaluation metrics if they don't already exist
-            if not hasattr(self, 'evaluation_losses'):
-                self.evaluation_losses = []
-            if not hasattr(self, 'evaluation_accuracies'):
-                self.evaluation_accuracies = []
+        progress_bar = tqdm(val_loader, desc="Evaluating", leave=True)
 
-            # Wrap the val_loader with tqdm to create a progress bar for evaluation
-            progress_bar = tqdm(val_loader, desc="Evaluating", leave=True)
+        with torch.no_grad():
+            for batch in progress_bar:
+                inputs, labels = batch
+                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                labels = labels.to(self.device)
 
-            with torch.no_grad():
-                for batch in progress_bar:
-                    inputs, labels = batch
-                    inputs = {k: v.to(self.device) for k, v in inputs.items()}
-                    labels = labels.to(self.device)
+                outputs = self.model(**inputs)  # Forward pass
 
-                    outputs = self.model(**inputs)  # Forward pass
+                logits = outputs.logits
+                predictions = torch.argmax(logits, dim=-1)
+                y_true.extend(labels.cpu().numpy())
+                y_pred.extend(predictions.cpu().numpy())
 
-                    loss = outputs.loss
-                    val_loss += loss.item()
+                correct_preds += (predictions == labels).sum().item()
+                total_preds += labels.size(0)
 
-                    logits = outputs.logits
-                    predictions = torch.argmax(logits, dim=-1)  # Get the most likely predictions
-                    y_true.extend(labels.cpu().numpy())
-                    y_pred.extend(predictions.cpu().numpy())
+        val_accuracy = correct_preds / total_preds
+        # Log or return these metrics as needed
+        self.logger.info(f"Validation Accuracy: {val_accuracy}")
+        self.logger.info(f"Precision: {precision_score(y_true, y_pred, zero_division=0)}")
+        self.logger.info(f"Recall: {recall_score(y_true, y_pred, zero_division=0)}")
+        self.logger.info(f"F1 Score: {f1_score(y_true, y_pred, zero_division=0)}")
+        self.logger.info(f"AUC-ROC: {roc_auc_score(y_true, y_pred)}")
 
-                    correct_preds += (predictions == labels).sum().item()  # Summing correct predictions
-                    total_preds += labels.size(0)  # Total number of predictions
+        # Append to the evaluation metrics lists
+        self.evaluation_accuracies.append(val_accuracy)
 
-                    # (Optional) Display custom messages in tqdm progress bar, like the current loss.
-                    progress_bar.set_postfix(loss=loss.item())
-
-                val_loss_avg = val_loss / len(val_loader)
-                val_accuracy = correct_preds / total_preds  # Calculate overall accuracy
-                # Log or return these metrics as needed
-
-                self.logger.info(f"Validation Loss: {val_loss_avg}")
-                self.logger.info(f"Validation Accuracy: {val_accuracy}")
-                self.logger.info(f"Precision: {precision_score(y_true, y_pred)}")
-                self.logger.info(f"Recall: {recall_score(y_true, y_pred)}")
-                self.logger.info(f"F1 Score: {f1_score(y_true, y_pred)}")
-                self.logger.info(f"AUC-ROC: {roc_auc_score(y_true, y_pred)}")
-
-                # Append to the evaluation metrics lists
-                self.evaluation_losses.append(val_loss_avg)
-                self.evaluation_accuracies.append(val_accuracy)
-
-            self.plot_confusion_matrix(y_true, y_pred)  # This line remains unchanged
-
-            #To save the final state of the model after training has been completed. It's useful when I'm satisfied with the trained model and want to deploy it or use it for inference later.
+        self.plot_confusion_matrix(y_true, y_pred)
 
 
     def save(self, file_path):
-        """Save the model to the specified file path."""
-        try:
-            # Create the directory if it doesn't exist
-            directory = os.path.dirname(file_path)
-            if not os.path.exists(directory):
-                os.makedirs(directory, exist_ok=True)
+            """Save the model to the specified file path."""
+            try:
+                # Create the directory if it doesn't exist
+                directory = os.path.dirname(file_path)
+                if not os.path.exists(directory):
+                    os.makedirs(directory, exist_ok=True)
 
-            # Save the model and tokenizer using `save_pretrained` method
-            self.model.save_pretrained(file_path)
-            self.tokenizer.save_pretrained(file_path)
+                # Save the model and tokenizer using `save_pretrained` method
+                self.model.save_pretrained(file_path)
+                self.tokenizer.save_pretrained(file_path)
 
-            self.logger.info(f"Model and tokenizer saved to {file_path}")
-        except Exception as e:
-            self.logger.error(f"Error saving model: {e}")
-            raise
+                self.logger.info(f"Model and tokenizer saved to {file_path}")
+            except Exception as e:
+                self.logger.error(f"Error saving model: {e}")
+                raise
 
 
-        #---------------------------------------------------------------------------------------------------------------------------------------------------------------
+            #---------------------------------------------------------------------------------------------------------------------------------------------------------------
     def plot_metrics(self, evaluation=False):
         """
             Plots the training/validation losses and accuracies. If in evaluation mode, it plots evaluation losses and accuracies.
