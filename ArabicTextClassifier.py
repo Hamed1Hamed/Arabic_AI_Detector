@@ -1,4 +1,5 @@
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, AdamW, get_linear_schedule_with_warmup
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, roc_auc_score, accuracy_score
 import matplotlib.pyplot as plt
 import numpy as np
@@ -108,7 +109,8 @@ class ArabicTextClassifier:
             raise TypeError("train_loader and val_loader must be DataLoader instances.")
 
         # Initialize the scheduler
-        scheduler = CosineAnnealingLR(self.optimizer, T_max=len(train_loader) * self.epochs)
+        #scheduler = CosineAnnealingLR(self.optimizer, T_max=len(train_loader) * self.epochs)
+        scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=5)
         self.logger.info('Training process started.')
 
         for epoch in range(start_epoch, self.epochs):
@@ -154,8 +156,7 @@ class ArabicTextClassifier:
                 else:
                     progress_bar.set_postfix(loss=loss_value, accuracy=0.0)
 
-            if scheduler is not None:
-                scheduler.step()
+
 
             # Calculate average train loss and accuracy
             avg_train_loss = total_train_loss / len(train_loader)
@@ -203,6 +204,8 @@ class ArabicTextClassifier:
                 avg_val_loss = total_val_loss / len(val_loader)
                 val_accuracy = correct_val_preds / max(total_val_preds, 1)
                 self.logger.info(f"Epoch {epoch + 1}, Val Loss: {avg_val_loss}, Val Acc: {val_accuracy}")
+                # Call the scheduler's step function with the validation loss
+                scheduler.step(avg_val_loss)  # This is where you use the validation loss
 
             # Checkpoint and early stopping
             if avg_val_loss < best_val_loss:
