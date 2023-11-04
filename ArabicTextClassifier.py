@@ -181,7 +181,7 @@ class ArabicTextClassifier:
 
                     # Add a check here
                     if loss is None:
-                        self.logger.error(f"Loss is None. Outputs: {outputs} Inputs: {inputs} Labels: {labels}")
+                        self.logger.error(f"Input tensor shape: {inputs['input_ids'].shape} Labels shape: {labels.shape}")
                         continue  # Skip this batch
 
                     if not torch.is_tensor(loss):
