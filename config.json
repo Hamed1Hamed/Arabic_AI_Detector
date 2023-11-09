@@ -1,5 +1,5 @@
 {
-    "learning_rate": 0.005,
+    "learning_rate": 0.001,
     "model_name": "aubmindlab/araelectra-base-discriminator",
     "epochs": 10,
     "batch_size": 64,
