@@ -80,27 +80,11 @@ class ArabicTextClassifier:
         self.evaluation_accuracies = []
 
 
-    def save_checkpoint(self, epoch):
-        # Make sure the checkpoint directory exists
-        os.makedirs(self.checkpoint_path, exist_ok=True)
-
-        # Save the model checkpoint
-        model_checkpoint_path = os.path.join(self.checkpoint_path, f"model_epoch_{epoch}.pt")
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            # Add any other states you want to save, e.g., scheduler
-        }, model_checkpoint_path)
-
-        # Save the tokenizer
-        tokenizer_checkpoint_path = os.path.join(self.checkpoint_path, f"tokenizer_epoch_{epoch}")
-        self.tokenizer.save_pretrained(tokenizer_checkpoint_path)
-
-        self.logger.info(f"Model checkpoint and tokenizer saved at {self.checkpoint_path} for epoch {epoch}")
 
 
     #----------------------------------------------------------------Training and Evaluation Functions-------------------------------------------------------------
+
+
     def train(self, train_loader, val_loader, start_epoch=0):
         best_val_loss = float('inf')
         epochs_without_improvement = 0  # Counter for early stopping
@@ -109,12 +93,11 @@ class ArabicTextClassifier:
             raise TypeError("train_loader and val_loader must be DataLoader instances.")
 
         # Initialize the scheduler
-        #scheduler = CosineAnnealingLR(self.optimizer, T_max=len(train_loader) * self.epochs)
         scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=5)
         self.logger.info('Training process started.')
 
         for epoch in range(start_epoch, self.epochs):
-            self.model.train() # begin training
+            self.model.train()  # Begin training
             total_train_loss = 0
             correct_train_preds = 0
             total_train_preds = 0
@@ -128,35 +111,28 @@ class ArabicTextClassifier:
                 inputs['labels'] = labels  # Add 'labels' to the inputs dictionary for loss computation
 
                 self.optimizer.zero_grad()
-
                 outputs = self.model(**inputs)
                 loss = outputs.loss
 
+                # Validate loss is a valid scalar tensor
                 if loss is None or not torch.is_tensor(loss) or loss.numel() != 1:
                     self.logger.error("Loss is not a valid scalar tensor.")
                     continue  # Skip this batch
 
                 loss_value = loss.item()
                 total_train_loss += loss_value
-
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 self.optimizer.step()
-
-
 
                 logits = outputs.logits
                 predictions = torch.argmax(logits, dim=-1)
                 correct_train_preds += torch.sum(predictions == labels).item()
                 total_train_preds += labels.size(0)
 
-                if total_train_preds > 0:
-                    train_accuracy = correct_train_preds / total_train_preds
-                    progress_bar.set_postfix(loss=loss_value, accuracy=train_accuracy)
-                else:
-                    progress_bar.set_postfix(loss=loss_value, accuracy=0.0)
-
-
+                # Calculate and display the running training accuracy
+                train_accuracy = correct_train_preds / total_train_preds if total_train_preds > 0 else 0.0
+                progress_bar.set_postfix(loss=loss_value, accuracy=train_accuracy)
 
             # Calculate average train loss and accuracy
             avg_train_loss = total_train_loss / len(train_loader)
@@ -164,120 +140,87 @@ class ArabicTextClassifier:
             self.logger.info(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Train Acc: {train_accuracy}")
 
             # Validation step
-            self.model.eval()
-            total_val_loss = 0
-            correct_val_preds = 0
-            total_val_preds = 0
+            avg_val_loss, val_accuracy = self.evaluate(val_loader)
 
-            with torch.no_grad():
-                for batch in val_loader:
-                    inputs, labels = batch
-                    inputs = {k: v.to(self.device) for k, v in inputs.items()}
-                    labels = labels.to(self.device)
-                    inputs['labels'] = labels  # Include this line to ensure the model calculates loss
+            # Scheduler step with the validation loss
+            scheduler.step(avg_val_loss)
 
-                    outputs = self.model(**inputs)
-                    loss = outputs.loss
-
-                    # Add a check here
-                    if loss is None:
-                        self.logger.error(f"Input tensor shape: {inputs['input_ids'].shape} Labels shape: {labels.shape}")
-                        continue  # Skip this batch
-
-                    if not torch.is_tensor(loss):
-                        self.logger.error(f"Loss is not a tensor. Loss: {loss}")
-                        continue  # Skip this batch
-
-                    if loss.numel() != 1:
-                        self.logger.error(f"Loss does not have a single element. Loss: {loss}")
-                        continue  # Skip this batch
-
-                    # Now it's safe to call loss.item() because you've checked loss is not None and is a tensor with a single element
-                    total_val_loss += loss.item()
-
-                    logits = outputs.logits
-                    _, predicted = torch.max(logits, dim=1)
-                    correct_val_preds += (predicted == labels).sum().item()
-                    total_val_preds += labels.size(0)
-
-            if len(val_loader) > 0:
-                avg_val_loss = total_val_loss / len(val_loader)
-                val_accuracy = correct_val_preds / max(total_val_preds, 1)
-                self.logger.info(f"Epoch {epoch + 1}, Val Loss: {avg_val_loss}, Val Acc: {val_accuracy}")
-                # Call the scheduler's step function with the validation loss
-                scheduler.step(avg_val_loss)  # This is where you use the validation loss
-
-            # Checkpoint and early stopping
+            # Checkpoint if this is the best model
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 epochs_without_improvement = 0
-                # Implement checkpoint saving if desired
-                self.save_checkpoint(epoch)  # Save the checkpoint for the current epoch
-
+                self.save_best_model()  # Save only the best model
             else:
                 epochs_without_improvement += 1
 
+            # Early stopping (if uncommented)
             # if epochs_without_improvement >= self.patience:
             #     self.logger.info("Early stopping triggered.")
             #     break
 
-            # Metrics recording. Append the metrics to their respective lists
+            # Record metrics for each epoch
             self.train_losses.append(avg_train_loss)
             self.val_losses.append(avg_val_loss)
             self.train_accuracies.append(train_accuracy)
             self.val_accuracies.append(val_accuracy)
 
-        # Save the final model and tokenizer
-        final_model_path = './model_final_save/'
-        self.model.save_pretrained(final_model_path)
-        self.tokenizer.save_pretrained(final_model_path)
-        self.logger.info(f'Final model and tokenizer saved at {final_model_path}.')
-
         self.logger.info('Training process has ended.')
 
 
+
+
     def evaluate(self, val_loader):
-        self.model.eval()
-        y_true = []
-        y_pred = []
-        correct_preds = 0
-        total_preds = 0
+            self.model.eval()
+            y_true = []
+            y_pred = []
+            correct_preds = 0
+            total_preds = 0
 
-        # Storage for evaluation metrics if they don't already exist
-        if not hasattr(self, 'evaluation_accuracies'):
-            self.evaluation_accuracies = []
+            # Storage for evaluation metrics if they don't already exist
+            if not hasattr(self, 'evaluation_accuracies'):
+                self.evaluation_accuracies = []
 
-        progress_bar = tqdm(val_loader, desc="Evaluating", leave=True)
+            progress_bar = tqdm(val_loader, desc="Evaluating", leave=True)
 
-        with torch.no_grad():
-            for batch in progress_bar:
-                inputs, labels = batch
-                inputs = {k: v.to(self.device) for k, v in inputs.items()}
-                labels = labels.to(self.device)
+            with torch.no_grad():
+                for batch in progress_bar:
+                    inputs, labels = batch
+                    inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                    labels = labels.to(self.device)
 
-                outputs = self.model(**inputs)  # Forward pass
+                    outputs = self.model(**inputs)  # Forward pass
 
-                logits = outputs.logits
-                predictions = torch.argmax(logits, dim=-1)
-                y_true.extend(labels.cpu().numpy())
-                y_pred.extend(predictions.cpu().numpy())
+                    logits = outputs.logits
+                    predictions = torch.argmax(logits, dim=-1)
+                    y_true.extend(labels.cpu().numpy())
+                    y_pred.extend(predictions.cpu().numpy())
 
-                correct_preds += (predictions == labels).sum().item()
-                total_preds += labels.size(0)
+                    correct_preds += (predictions == labels).sum().item()
+                    total_preds += labels.size(0)
 
-        val_accuracy = correct_preds / total_preds
-        # Log or return these metrics as needed
-        self.logger.info(f"Validation Accuracy: {val_accuracy}")
-        self.logger.info(f"Precision: {precision_score(y_true, y_pred, zero_division=0)}")
-        self.logger.info(f"Recall: {recall_score(y_true, y_pred, zero_division=0)}")
-        self.logger.info(f"F1 Score: {f1_score(y_true, y_pred, zero_division=0)}")
-        self.logger.info(f"AUC-ROC: {roc_auc_score(y_true, y_pred)}")
+            val_accuracy = correct_preds / total_preds
+            # Log or return these metrics as needed
+            self.logger.info(f"Validation Accuracy: {val_accuracy}")
+            self.logger.info(f"Precision: {precision_score(y_true, y_pred, zero_division=0)}")
+            self.logger.info(f"Recall: {recall_score(y_true, y_pred, zero_division=0)}")
+            self.logger.info(f"F1 Score: {f1_score(y_true, y_pred, zero_division=0)}")
+            self.logger.info(f"AUC-ROC: {roc_auc_score(y_true, y_pred)}")
 
-        # Append to the evaluation metrics lists
-        self.evaluation_accuracies.append(val_accuracy)
+            # Append to the evaluation metrics lists
+            self.evaluation_accuracies.append(val_accuracy)
 
-        self.plot_confusion_matrix(y_true, y_pred)
+            self.plot_confusion_matrix(y_true, y_pred)
 
+#save()	Saves the model and tokenizer at a specified file path.
+#save_best_model()	Saves the best model and tokenizer based on a specific metric.
+    def save_best_model(self):
+        # Save the best model without including the epoch in the filename
+        model_save_path = os.path.join(self.checkpoint_path, "best_model.pt")
+        torch.save(self.model.state_dict(), model_save_path)
+        # Save the tokenizer in the same way (without epoch in the name if desired)
+        tokenizer_save_path = os.path.join(self.checkpoint_path, "best_tokenizer")
+        self.tokenizer.save_pretrained(tokenizer_save_path)
+        self.logger.info(f"Best model and tokenizer saved to {self.checkpoint_path}")
 
     def save(self, file_path):
             """Save the model to the specified file path."""
