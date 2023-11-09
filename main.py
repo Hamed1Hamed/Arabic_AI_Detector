@@ -3,7 +3,8 @@ import json
 from ArabicTextDataset import ArabicTextDataset
 from ArabicTextDataLoader import ArabicTextDataLoader
 from ArabicTextClassifier import ArabicTextClassifier
-from transformers import AutoModelForSequenceClassification as ArabertModel
+from transformers import AutoModelForSequenceClassification as ArabertModel, AutoTokenizer, \
+    AutoModelForSequenceClassification
 from transformers import AutoTokenizer as ArabertTokenizer
 import logging
 
@@ -27,12 +28,12 @@ def main():
     # Check if there is a saved model and load it, otherwise load the default model
     if os.path.isdir(model_path):
         logging.info(f"Loading model from {model_path}")
-        model = ArabertModel.from_pretrained(model_path)
-        tokenizer = ArabertTokenizer.from_pretrained(model_path)
+        model = AutoModelForSequenceClassification.from_pretrained(model_path)
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
     else:
         logging.info(f"No saved model found at {model_path}. Loading default model.")
-        model = ArabertModel.from_pretrained(model_name)
-        tokenizer = ArabertTokenizer.from_pretrained(model_name)
+        model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     # Constructing datasets using the data_type for clarity
     train_dataset = ArabicTextDataset(tokenizer, 'train')
