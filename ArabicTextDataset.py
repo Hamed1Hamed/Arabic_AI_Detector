@@ -59,19 +59,34 @@ class ArabicTextDataset(Dataset):
     def _load_csv(self, file_path):
         try:
             df = pd.read_csv(file_path)
+            if df.empty:
+                logging.error("CSV file is empty: %s", file_path)
+                raise ValueError("CSV file is empty")
+
             for index, row in df.iterrows():
-                text = row['text']  # Directly use the text without preprocessing
-                char_count = row['Char_Count']  # The new Char_Count column
-                label = int(row['label'])  # Convert label to integer
-                self.samples.append((text, char_count, label))
-        except Exception as e:
-            raise IOError(f"Error reading the CSV file: {e}")
+                text = row['text']
+                #char_count = row['Char_Count']
+                label = int(row['label'])
+                #self.samples.append((text, char_count, label))
+                self.samples.append((text, label))
+        except pd.errors.EmptyDataError:
+            logging.error("CSV file is empty: %s", file_path)
+            raise
+        except pd.errors.ParserError as e:
+            logging.error("Error parsing the CSV file at %s: %s", file_path, e)
+            raise
+        except FileNotFoundError as e:
+            logging.error("CSV file not found: %s", file_path)
+            raise
+        except Exception as e:  # You can handle any other unforeseen exceptions here.
+            logging.error("An unexpected error occurred while reading the CSV file at %s: %s", file_path, e)
+            raise
 
     def __len__(self):
         return len(self.samples)
 
-    def __getitem__(self, idx):
-        text, char_count, label = self.samples[idx]
+    def __getitem__(self, idx): # deleted char_count from return
+        text, label = self.samples[idx]
         encoding = self.tokenizer(
             text,
             truncation=True,
@@ -80,4 +95,4 @@ class ArabicTextDataset(Dataset):
             return_tensors="pt"
         )
         # You can now return Char_Count if you plan to use it as a feature
-        return {key: val.squeeze(0) for key, val in encoding.items()}, torch.tensor(char_count), torch.tensor(label, dtype=torch.long)
+        return {key: val.squeeze(0) for key, val in encoding.items()}, torch.tensor(label, dtype=torch.long)

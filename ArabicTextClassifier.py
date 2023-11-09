@@ -171,6 +171,7 @@ class ArabicTextClassifier:
 
     def evaluate(self, val_loader):
             self.model.eval()
+            total_val_loss = 0
             y_true = []
             y_pred = []
             correct_preds = 0
@@ -189,6 +190,8 @@ class ArabicTextClassifier:
                     labels = labels.to(self.device)
 
                     outputs = self.model(**inputs)  # Forward pass
+                    loss = outputs.loss
+                    total_val_loss += loss.item() # Here we are adding the loss of each batch to the total loss
 
                     logits = outputs.logits
                     predictions = torch.argmax(logits, dim=-1)
@@ -198,6 +201,7 @@ class ArabicTextClassifier:
                     correct_preds += (predictions == labels).sum().item()
                     total_preds += labels.size(0)
 
+            avg_val_loss = total_val_loss / len(val_loader)
             val_accuracy = correct_preds / total_preds
             # Log or return these metrics as needed
             self.logger.info(f"Validation Accuracy: {val_accuracy}")
@@ -210,6 +214,10 @@ class ArabicTextClassifier:
             self.evaluation_accuracies.append(val_accuracy)
 
             self.plot_confusion_matrix(y_true, y_pred)
+
+
+            return avg_val_loss, val_accuracy
+
 
 #save()	Saves the model and tokenizer at a specified file path.
 #save_best_model()	Saves the best model and tokenizer based on a specific metric.

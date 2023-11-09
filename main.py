@@ -55,7 +55,7 @@ def main():
         return
 
     # Save the model after training
-    save_path = os.path.join(model_path, 'AI_Arabic_Detector')
+    save_path = os.path.join(model_path, 'Saved_AI_Arabic_Detector_Model')
     classifier.save(save_path)
 
     # Evaluate the trained model on the test data
