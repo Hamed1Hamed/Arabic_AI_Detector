@@ -1,40 +1,21 @@
 import os
 import torch
-from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer
-import logging
-import re
-import json
+from torch.utils.data import Dataset
 import pandas as pd
-
-
+import logging
+import json
 
 # Load configuration
 with open('config.json') as config_file:
     config = json.load(config_file)
 dataset_folder = config['root_folder']
 
-
-def preprocess_arabic(text):
-    text = re.sub("[إأٱآا]", "ا", text)
-    text = re.sub("ى", "ي", text)
-    text = re.sub("ؤ", "ء", text)
-    text = re.sub("ئ", "ء", text)
-    text = re.sub("ة", "ه", text)
-    text = re.sub("گ", "ك", text)
-    text = re.sub("[ﻷﻵﻹﻻ]", "لا", text)
-    #text = re.sub(r'[^ا-ي0-9\s]', '', text)  # Remove all non-Arabic-characters and non-digits
-    #text = re.sub(r'\s+', ' ', text) # Remove extra spaces
-    return text.rstrip()
-
-
 # Define the mapping from data_type to CSV filenames
 data_type_to_filename = {
-    'train': 'Training.xlsx',
-    'val': 'Validation.xlsx',
-    'test': 'Testing.xlsx'
+    'train': 'Training.csv',
+    'val': 'Validation.csv',
+    'test': 'Testing.csv'
 }
-
 
 class ArabicTextDataset(Dataset):
     def __init__(self, tokenizer, data_type):
@@ -67,9 +48,7 @@ class ArabicTextDataset(Dataset):
         self.samples = []
 
         # Load the dataset from the CSV file
-        # ...
-        self._load_excel(file_path)
-
+        self._load_csv(file_path)
 
         if len(self.samples) == 0:
             logging.error("No valid data samples found.")
@@ -77,33 +56,22 @@ class ArabicTextDataset(Dataset):
 
         logging.info(f"Loaded {len(self.samples)} samples.")
 
-    def _load_excel(self, file_path):
+    def _load_csv(self, file_path):
         try:
-            df = pd.read_excel(file_path)
-            # Assuming that the dataframe has two columns: 'text' for the review and 'label' for the sentiment
+            df = pd.read_csv(file_path)
             for index, row in df.iterrows():
                 text = row['text']  # Directly use the text without preprocessing
-                label = int(row['label'])  # Replace 'label' with the actual column name for your labels
-                self.samples.append((text, label))
+                char_count = row['Char_Count']  # The new Char_Count column
+                label = int(row['label'])  # Convert label to integer
+                self.samples.append((text, char_count, label))
         except Exception as e:
-            raise IOError(f"Error reading the Excel file: {e}")
-
-    # def _load_excel(self, file_path):
-    #     try:
-    #         df = pd.read_excel(file_path)
-    #         # Assuming that the dataframe has two columns: 'text' for the review and 'label' for the sentiment
-    #         for index, row in df.iterrows():
-    #             text = preprocess_arabic(row['text'])  # Replace 'text' with the actual column name for your text data
-    #             label = int(row['label'])  # Replace 'label' with the actual column name for your labels
-    #             self.samples.append((text, label))
-    #     except Exception as e:
-    #         raise IOError(f"Error reading the Excel file: {e}")
+            raise IOError(f"Error reading the CSV file: {e}")
 
     def __len__(self):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        text, label = self.samples[idx]
+        text, char_count, label = self.samples[idx]
         encoding = self.tokenizer(
             text,
             truncation=True,
@@ -111,4 +79,5 @@ class ArabicTextDataset(Dataset):
             max_length=512,
             return_tensors="pt"
         )
-        return {key: val.squeeze(0) for key, val in encoding.items()}, torch.tensor(label, dtype=torch.long)
+        # You can now return Char_Count if you plan to use it as a feature
+        return {key: val.squeeze(0) for key, val in encoding.items()}, torch.tensor(char_count), torch.tensor(label, dtype=torch.long)
