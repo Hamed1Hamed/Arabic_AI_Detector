@@ -1,34 +1,45 @@
-import json
+from torch.utils.data import Dataset, DataLoader
 import logging
-from torch.utils.data import DataLoader, Dataset
 
 class ArabicTextDataLoader:
-    def __init__(self, train_dataset, val_dataset, test_dataset, batch_size):
-
-        # Initialize logging
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-        # Checking the type of the provided datasets
-        if not isinstance(train_dataset, Dataset) or not isinstance(val_dataset, Dataset) or not isinstance(test_dataset, Dataset):
-            logging.error("Invalid dataset type provided.")  # Logging the error before raising the exception
-            raise TypeError("Provided dataset is not a valid PyTorch Dataset.")
+    def __init__(self, train_dataset, val_dataset, test_dataset, batch_size, num_workers=0, pin_memory=False):
+        # Ensure the datasets provided are of type `Dataset`
+        if not all(isinstance(dataset, Dataset) for dataset in (train_dataset, val_dataset, test_dataset)):
+            raise TypeError("All provided datasets must be of type `Dataset`.")
 
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
         self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.pin_memory = pin_memory
 
     def get_data_loaders(self):
-        # No need to split the dataset, just create DataLoaders directly
+        logging.info("Creating training data loader.")
+        train_loader = DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
+        )
 
-        # Creating data loaders and logging the process
-        logging.info("Creating data loaders with appropriate batch size and shuffle parameters")
+        logging.info("Creating validation data loader.")
+        val_loader = DataLoader(
+            self.val_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
+        )
 
-        train_loader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
-        val_loader = DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False)
-        test_loader = DataLoader(self.test_dataset, batch_size=self.batch_size,shuffle=False)  # Typically, we do not shuffle the test set
+        logging.info("Creating test data loader.")
+        test_loader = DataLoader(
+            self.test_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
+        )
 
-
-
-        return train_loader, val_loader, test_loader  # return all three loaders
-
+        return train_loader, val_loader, test_loader

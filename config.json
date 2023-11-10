@@ -7,6 +7,6 @@
     "model_save_path": "saved_model",
     "final_model_path": "model_final_save",
     "checkpoint_path": "model_checkpoints",
-    "patience": 10
+    "patience": 10,
+    "indicator_phrases_path": "chatGPT_words_ar.txt"
 }
-

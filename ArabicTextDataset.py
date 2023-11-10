@@ -16,13 +16,19 @@ data_type_to_filename = {
     'val': 'Validation.csv',
     'test': 'Testing.csv'
 }
+def load_indicator_phrases(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return [line.strip() for line in file]
+
 
 class ArabicTextDataset(Dataset):
-    def __init__(self, tokenizer, data_type):
+    def __init__(self, tokenizer, data_type, indicator_phrases_path):
+
         """
         :param tokenizer: The tokenizer instance.
         :param data_type: Type of data - 'train', 'val', or 'test'.
         """
+        self.indicator_phrases = load_indicator_phrases(indicator_phrases_path)
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         logging.info('Initializing ArabicTextDataset')
 
@@ -82,10 +88,12 @@ class ArabicTextDataset(Dataset):
             logging.error("An unexpected error occurred while reading the CSV file at %s: %s", file_path, e)
             raise
 
+    def _contains_indicator_phrases(self, text):
+        return any(phrase in text for phrase in self.indicator_phrases)
     def __len__(self):
         return len(self.samples)
 
-    def __getitem__(self, idx): # deleted char_count from return
+    def __getitem__(self, idx):
         text, label = self.samples[idx]
         encoding = self.tokenizer(
             text,
@@ -94,5 +102,8 @@ class ArabicTextDataset(Dataset):
             max_length=512,
             return_tensors="pt"
         )
-        # You can now return Char_Count if you plan to use it as a feature
-        return {key: val.squeeze(0) for key, val in encoding.items()}, torch.tensor(label, dtype=torch.long)
+        # Check if the text contains any of the AI indicator phrases
+        ai_indicator = torch.tensor([self._contains_indicator_phrases(text)], dtype=torch.float)
+
+        # Return the encoding, the AI indicator, and the label
+        return {key: val.squeeze(0) for key, val in encoding.items()}, ai_indicator, torch.tensor(label,dtype=torch.long)

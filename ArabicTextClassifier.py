@@ -12,75 +12,67 @@ from torch.utils.data import DataLoader
 import os
 logging.basicConfig(filename='classifier.log', level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
 import json
-class ArabicTextClassifier:
-   # classifier = ArabicTextClassifier(model=model, tokenizer=tokenizer, model_name=model_name, num_labels=2, epochs=epochs, learning_rate=learning_rate)
+from transformers import AutoModel
+import torch
+import torch.nn as nn
 
-    def __init__(self, model, tokenizer, model_name, num_labels, epochs, learning_rate):
-        with open('config.json', 'r') as config_file:
-            config = json.load(config_file)
-        # Setup logging
-        self.logger = logging.getLogger(__name__)
-        self.logger.info('Initializing the ArabicTextClassifier.')
-        self.checkpoint_path = config["checkpoint_path"]  # ensure this config key exists
-        # self.patience = patience
-        # Model setup
-        if model is not None:
-            self.model = model
-        elif model_name is not None:
-            try:
-                self.model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
-            except Exception as e:
-                error_message = f"Failed to load model. Error: {str(e)}"
-                self.logger.error(error_message)
-                raise ValueError(error_message)
-        else:
-            raise ValueError("Either 'model' or 'model_name' must be provided.")
+class CustomClassifierHead(nn.Module):
+    def __init__(self, hidden_size, num_labels):
+        super(CustomClassifierHead, self).__init__()
+        # The transformer model output size (e.g., 768 for BERT-base)
+        self.dense = nn.Linear(hidden_size, hidden_size)
+        self.dropout = nn.Dropout(0.1)
+        # Additional input for the binary feature
+        self.binary_feature = nn.Linear(1, hidden_size)
+        self.out_proj = nn.Linear(hidden_size * 2, num_labels)
 
-        # Tokenizer setup
-        if tokenizer is not None:
-            self.tokenizer = tokenizer  # Use the provided tokenizer instance
-        else:
-            # Load the tokenizer if not provided
-            try:
-                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            except Exception as e:
-                error_message = f"Failed to load tokenizer. Error: {str(e)}"
-                self.logger.error(error_message)  # Logging the error before raising
-                raise ValueError(error_message)
+    def forward(self, transformer_output, binary_feature):
+        x = self.dense(transformer_output)
+        x = self.dropout(x)
+        # Process the binary feature
+        binary_feature = binary_feature.unsqueeze(1)  # Add an extra dimension
+        binary_feature = self.binary_feature(binary_feature)
+        # Concatenate the transformer output and binary feature
+        concat = torch.cat((x, binary_feature), dim=1)
+        # Pass the concatenated features to the output projection
+        logits = self.out_proj(concat)
+        return logits
 
-        # Set the other attributes
-        self.num_labels = num_labels
-        self.epochs = epochs
-        self.learning_rate = learning_rate
+class CustomModel(nn.Module):
+    def __init__(self, model_name, num_labels):
+        super(CustomModel, self).__init__()
+        # Load the pre-trained model
+        self.transformer = AutoModel.from_pretrained(model_name)
+        hidden_size = self.transformer.config.hidden_size
+        # Use the custom classifier head
+        self.classifier = CustomClassifierHead(hidden_size, num_labels)
+
+    def forward(self, input_ids, attention_mask, binary_feature):
+        # Get the output from the pre-trained transformer
+        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
+        sequence_output = outputs.last_hidden_state[:, 0, :]  # Take [CLS] token
+        # Forward through the custom classifier head
+        logits = self.classifier(sequence_output, binary_feature)
+        return logits
 
 
 
-        # Check device availability (CUDA)
+class ArabicTextClassifier(nn.Module):
+    def __init__(self, model_name, num_labels, learning_rate, epochs, checkpoint_path):
+        super(ArabicTextClassifier, self).__init__()
+        self.model = CustomModel(model_name, num_labels)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.logger.info(f"Device in use: {self.device}")
-        self.model.to(self.device)
-
-        # Attempt to setup the optimizer with exception handling
-        try:
-            self.optimizer = AdamW(self.model.parameters(), lr=self.learning_rate)
-            self.logger.info("Optimizer initialized successfully.")
-        except Exception as e:
-            error_message = f"Failed to initialize optimizer. Error: {str(e)}"
-            self.logger.error(error_message)
-            raise ValueError(error_message)
-
-        # Initialize the lists for tracking progress
+        self.epochs = epochs
+        self.optimizer = AdamW(self.model.parameters(), lr=learning_rate)
+        self.logger = logging.getLogger(__name__)
+        self.checkpoint_path = checkpoint_path
         self.train_losses = []
         self.val_losses = []
         self.train_accuracies = []
         self.val_accuracies = []
 
-        # These are used during independent evaluation
-        self.evaluation_losses = []
-        self.evaluation_accuracies = []
-
-
-
+    def forward(self, input_ids, attention_mask, binary_feature):
+        return self.model(input_ids, attention_mask, binary_feature)
 
     #----------------------------------------------------------------Training and Evaluation Functions-------------------------------------------------------------
 
@@ -91,7 +83,7 @@ class ArabicTextClassifier:
 
         if not isinstance(train_loader, DataLoader) or not isinstance(val_loader, DataLoader):
             raise TypeError("train_loader and val_loader must be DataLoader instances.")
-
+        self.model.to(self.device)  # Make sure this is done before training begins
         # Initialize the scheduler
         scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=5)
         self.logger.info('Training process started.')
@@ -105,19 +97,15 @@ class ArabicTextClassifier:
             progress_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{self.epochs}", leave=True)
 
             for batch in progress_bar:
-                inputs, labels = batch
+                inputs, ai_indicator, labels = batch  # Unpack the ai_indicator tensor
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                ai_indicator = ai_indicator.to(self.device)  # Move ai_indicator to the correct device
                 labels = labels.to(self.device)
-                inputs['labels'] = labels  # Add 'labels' to the inputs dictionary for loss computation
 
                 self.optimizer.zero_grad()
-                outputs = self.model(**inputs)
-                loss = outputs.loss
-
-                # Validate loss is a valid scalar tensor
-                if loss is None or not torch.is_tensor(loss) or loss.numel() != 1:
-                    self.logger.error("Loss is not a valid scalar tensor.")
-                    continue  # Skip this batch
+                logits = self.model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'],
+                                    ai_indicator=ai_indicator)
+                loss = torch.nn.functional.cross_entropy(logits, labels)  # Calculate loss
 
                 loss_value = loss.item()
                 total_train_loss += loss_value
@@ -125,7 +113,6 @@ class ArabicTextClassifier:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 self.optimizer.step()
 
-                logits = outputs.logits
                 predictions = torch.argmax(logits, dim=-1)
                 correct_train_preds += torch.sum(predictions == labels).item()
                 total_train_preds += labels.size(0)
@@ -166,89 +153,86 @@ class ArabicTextClassifier:
 
         self.logger.info('Training process has ended.')
 
-
-
-
     def evaluate(self, val_loader):
-            self.model.eval()
-            total_val_loss = 0
-            y_true = []
-            y_pred = []
-            correct_preds = 0
-            total_preds = 0
+        self.model.eval()
+        self.model.to(self.device)  # Make sure this is done before evaluation
+        total_val_loss = 0
+        y_true = []
+        y_pred = []
+        correct_preds = 0
+        total_preds = 0
+        loss_fn = torch.nn.CrossEntropyLoss()
 
-            # Storage for evaluation metrics if they don't already exist
-            if not hasattr(self, 'evaluation_accuracies'):
-                self.evaluation_accuracies = []
+        # Storage for evaluation metrics if they don't already exist
+        if not hasattr(self, 'evaluation_accuracies'):
+            self.evaluation_accuracies = []
 
-            progress_bar = tqdm(val_loader, desc="Evaluating", leave=True)
+        progress_bar = tqdm(val_loader, desc="Evaluating", leave=True)
 
-            with torch.no_grad():
-                for batch in progress_bar:
-                    inputs, labels = batch
-                    inputs = {k: v.to(self.device) for k, v in inputs.items()}
-                    labels = labels.to(self.device)
+        with torch.no_grad():
+            for batch in progress_bar:
+                inputs, ai_indicator, labels = batch  # Unpack the ai_indicator tensor
+                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                ai_indicator = ai_indicator.to(self.device)  # Move ai_indicator to the correct device
+                labels = labels.to(self.device)
 
-                    outputs = self.model(**inputs)  # Forward pass
-                    loss = outputs.loss
-                    total_val_loss += loss.item() # Here we are adding the loss of each batch to the total loss
+                # Forward pass through the model to get logits
+                logits = self.model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'],
+                                    ai_indicator=ai_indicator)
 
-                    logits = outputs.logits
-                    predictions = torch.argmax(logits, dim=-1)
-                    y_true.extend(labels.cpu().numpy())
-                    y_pred.extend(predictions.cpu().numpy())
+                # Compute loss using the logits and the labels
+                loss = loss_fn(logits, labels)
+                total_val_loss += loss.item()
 
-                    correct_preds += (predictions == labels).sum().item()
-                    total_preds += labels.size(0)
+                # Get the predictions from the logits
+                predictions = torch.argmax(logits, dim=-1)
+                y_true.extend(labels.cpu().numpy())
+                y_pred.extend(predictions.cpu().numpy())
 
-            avg_val_loss = total_val_loss / len(val_loader)
-            val_accuracy = correct_preds / total_preds
-            # Log or return these metrics as needed
-            self.logger.info(f"Validation Accuracy: {val_accuracy}")
-            self.logger.info(f"Precision: {precision_score(y_true, y_pred, zero_division=0)}")
-            self.logger.info(f"Recall: {recall_score(y_true, y_pred, zero_division=0)}")
-            self.logger.info(f"F1 Score: {f1_score(y_true, y_pred, zero_division=0)}")
-            self.logger.info(f"AUC-ROC: {roc_auc_score(y_true, y_pred)}")
+                correct_preds += (predictions == labels).sum().item()
+                total_preds += labels.size(0)
 
-            # Append to the evaluation metrics lists
-            self.evaluation_accuracies.append(val_accuracy)
+        avg_val_loss = total_val_loss / len(val_loader)
+        val_accuracy = correct_preds / total_preds
+        # Log or return these metrics as needed
+        self.logger.info(f"Validation Accuracy: {val_accuracy}")
+        self.logger.info(f"Precision: {precision_score(y_true, y_pred, zero_division=0)}")
+        self.logger.info(f"Recall: {recall_score(y_true, y_pred, zero_division=0)}")
+        self.logger.info(f"F1 Score: {f1_score(y_true, y_pred, zero_division=0)}")
+        self.logger.info(f"AUC-ROC: {roc_auc_score(y_true, y_pred)}")
 
-            self.plot_confusion_matrix(y_true, y_pred)
+        # Append to the evaluation metrics lists
+        self.evaluation_accuracies.append(val_accuracy)
 
+        self.plot_confusion_matrix(y_true, y_pred)
 
-            return avg_val_loss, val_accuracy
+        return avg_val_loss, val_accuracy
 
-
-#save()	Saves the model and tokenizer at a specified file path.
+    #save()	Saves the model and tokenizer at a specified file path.
 #save_best_model()	Saves the best model and tokenizer based on a specific metric.
     def save_best_model(self):
         # Save the best model without including the epoch in the filename
         model_save_path = os.path.join(self.checkpoint_path, "best_model.pt")
         torch.save(self.model.state_dict(), model_save_path)
-        # Save the tokenizer in the same way (without epoch in the name if desired)
-        tokenizer_save_path = os.path.join(self.checkpoint_path, "best_tokenizer")
-        self.tokenizer.save_pretrained(tokenizer_save_path)
-        self.logger.info(f"Best model and tokenizer saved to {self.checkpoint_path}")
+        self.logger.info(f"Best model saved to {model_save_path}")
 
     def save(self, file_path):
-            """Save the model to the specified file path."""
-            try:
-                # Create the directory if it doesn't exist
-                directory = os.path.dirname(file_path)
-                if not os.path.exists(directory):
-                    os.makedirs(directory, exist_ok=True)
+        """Save the model state dictionary to the specified file path."""
+        try:
+            # Create the directory if it doesn't exist
+            directory = os.path.dirname(file_path)
+            if not os.path.exists(directory):
+                os.makedirs(directory, exist_ok=True)
 
-                # Save the model and tokenizer using `save_pretrained` method
-                self.model.save_pretrained(file_path)
-                self.tokenizer.save_pretrained(file_path)
+            # Save the model state dictionary
+            model_save_path = os.path.join(file_path, "model_state_dict.pt")
+            torch.save(self.model.state_dict(), model_save_path)
 
-                self.logger.info(f"Model and tokenizer saved to {file_path}")
-            except Exception as e:
-                self.logger.error(f"Error saving model: {e}")
-                raise
+            self.logger.info(f"Model state dictionary saved to {model_save_path}")
+        except Exception as e:
+            self.logger.error(f"Error saving model: {e}")
+            raise
 
-
-            #---------------------------------------------------------------------------------------------------------------------------------------------------------------
     def plot_metrics(self, evaluation=False):
         """
             Plots the training/validation losses and accuracies. If in evaluation mode, it plots evaluation losses and accuracies.
@@ -319,17 +303,26 @@ class ArabicTextClassifier:
         plt.show()
 
     def plot_confusion_matrix(self, y_true, y_pred):
-        self.logger.info('Plotting confusion matrix.')  # New log entry
+        self.logger.info('Plotting confusion matrix.')  # Log entry
+
+        # Define the labels for the confusion matrix
+        classes = ['AI-generated', 'Human-written']
 
         cm = confusion_matrix(y_true, y_pred)
-        plt.figure(figsize=(6,6))
+        plt.figure(figsize=(6, 6))
         plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-        plt.title('Confusion matrix')
+        plt.title('Confusion Matrix')
         plt.colorbar()
-        tick_marks = np.arange(self.num_labels)
-        plt.xticks(tick_marks, range(self.num_labels))
-        plt.yticks(tick_marks, range(self.num_labels))
 
+        tick_marks = np.arange(len(classes))
+        plt.xticks(tick_marks, classes, rotation=45)
+        plt.yticks(tick_marks, classes)
+
+        # Label the axes
+        plt.xlabel('Predicted Label')
+        plt.ylabel('True Label')
+
+        # Loop over the data locations to create text annotations
         fmt = 'd'
         thresh = cm.max() / 2.
         for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
@@ -337,7 +330,6 @@ class ArabicTextClassifier:
                      horizontalalignment="center",
                      color="white" if cm[i, j] > thresh else "black")
 
-        plt.ylabel('True label')
-        plt.xlabel('Predicted label')
         plt.tight_layout()
         plt.show()
+

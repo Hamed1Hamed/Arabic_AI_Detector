@@ -20,49 +20,67 @@ def main():
         config = json.load(config_file)
 
     model_name = config['model_name']
-    learning_rate = config['learning_rate']
-    epochs = config['epochs']
     batch_size = config['batch_size']
     model_path = config['final_model_path']
+    indicator_phrases_path = config['indicator_phrases_path']  # Load the indicator phrases path
 
-    # Check if there is a saved model and load it, otherwise load the default model
-    if os.path.isdir(model_path):
-        logging.info(f"Loading model from {model_path}")
-        model = AutoModelForSequenceClassification.from_pretrained(model_path)
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
-    else:
-        logging.info(f"No saved model found at {model_path}. Loading default model.")
-        model = AutoModelForSequenceClassification.from_pretrained(model_name)
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-    # Constructing datasets using the data_type for clarity
-    train_dataset = ArabicTextDataset(tokenizer, 'train')
-    val_dataset = ArabicTextDataset(tokenizer, 'val')
-    test_dataset = ArabicTextDataset(tokenizer, 'test')
 
-    # Creating data loaders
-    data_loader = ArabicTextDataLoader(train_dataset, val_dataset, test_dataset, batch_size=batch_size)
+    # Initialize datasets
+    train_dataset = ArabicTextDataset(tokenizer, 'train', indicator_phrases_path)
+    val_dataset = ArabicTextDataset(tokenizer, 'val', indicator_phrases_path)
+    test_dataset = ArabicTextDataset(tokenizer, 'test', indicator_phrases_path)
+
+    # Initialize data loaders
+    data_loader = ArabicTextDataLoader(
+        train_dataset=train_dataset,
+        val_dataset=val_dataset,
+        test_dataset=test_dataset,
+        batch_size=batch_size,
+        num_workers=4,
+        pin_memory=True
+    )
+
     train_loader, val_loader, test_loader = data_loader.get_data_loaders()
 
     # Initialize the classifier
-    classifier = ArabicTextClassifier(model=model, tokenizer=tokenizer, model_name=model_name, num_labels=2, epochs=epochs, learning_rate=learning_rate)
+    classifier = ArabicTextClassifier(
+        model_name=model_name,
+        num_labels=2,
+        learning_rate=config['learning_rate'],
+        epochs=config['epochs'],
+        checkpoint_path=config['checkpoint_path']
+    )
 
-    # Train the model
+    # Move classifier to the appropriate device
+    classifier.to(classifier.device)
+
+    # Train and evaluate
     try:
         classifier.train(train_loader, val_loader)
+
+        # Evaluate on test data
+        classifier.evaluate(test_loader)
+
+        # Plot training/validation metrics
+        classifier.plot_metrics()
+
+        # Save final model
+        save_path = os.path.join(config['final_model_path'], 'Saved_AI_Arabic_Detector_Model')
+        classifier.save(save_path)
+
+        # Check if the best model was saved during training
+        checkpoint_dir = config['checkpoint_path']  # Use the path from the configuration
+        if os.path.isfile(os.path.join(checkpoint_dir, "best_model.pt")):
+            print("The best model was saved successfully.")
+        else:
+            print("The best model was not saved.")
+
     except Exception as e:
-        logging.error(f"An error occurred during training: {str(e)}")
-        return
+        logging.error(f"An error occurred: {str(e)}")
 
-    # Save the model after training
-    save_path = os.path.join(model_path, 'Saved_AI_Arabic_Detector_Model')
-    classifier.save(save_path)
-
-    # Evaluate the trained model on the test data
-    classifier.evaluate(test_loader)
-
-    # Plot metrics
-    classifier.plot_metrics()
 
 if __name__ == '__main__':
     main()
