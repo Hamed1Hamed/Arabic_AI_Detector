@@ -47,12 +47,12 @@ class CustomModel(nn.Module):
         # Use the custom classifier head
         self.classifier = CustomClassifierHead(hidden_size, num_labels)
 
-    def forward(self, input_ids, attention_mask, binary_feature):
+    def forward(self, input_ids, attention_mask, ai_indicator):
         # Get the output from the pre-trained transformer
         outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
         sequence_output = outputs.last_hidden_state[:, 0, :]  # Take [CLS] token
         # Forward through the custom classifier head
-        logits = self.classifier(sequence_output, binary_feature)
+        logits = self.classifier(sequence_output, ai_indicator)
         return logits
 
 
@@ -177,8 +177,8 @@ class ArabicTextClassifier(nn.Module):
                 labels = labels.to(self.device)
 
                 # Forward pass through the model to get logits
-                logits = self.model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'],
-                                    ai_indicator=ai_indicator)
+                logits = self.model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'], ai_indicator=ai_indicator)
+
 
                 # Compute loss using the logits and the labels
                 loss = loss_fn(logits, labels)
