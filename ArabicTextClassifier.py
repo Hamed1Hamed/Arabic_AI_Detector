@@ -27,19 +27,22 @@ class CustomClassifierHead(nn.Module):
         self.out_proj = nn.Linear(hidden_size * 2, num_labels)
 
     def forward(self, transformer_output, binary_feature):
-        # Ensure transformer_output is 2D [batch_size, hidden_size]
-        x = self.dense(transformer_output)
-        x = self.dropout(x)
+        # Ensure binary_feature is 1D [batch_size], then unsqueeze to [batch_size, 1]
+        if binary_feature.dim() == 1:
+            binary_feature = binary_feature.unsqueeze(1)
+        elif binary_feature.dim() == 3:
+            binary_feature = binary_feature.squeeze()  # Correcting the shape if it's [batch_size, 1, 1]
 
-        # Ensure binary_feature is 1D [batch_size], then expand to [batch_size, hidden_size]
-        binary_feature = binary_feature.unsqueeze(-1)
-        binary_feature_expanded = self.binary_feature(binary_feature)
+        # Process the binary feature to make it [batch_size, hidden_size]
+        binary_feature = self.binary_feature(binary_feature)
 
-        # Concatenate along the feature dimension (assuming x is [batch_size, hidden_size])
-        concat = torch.cat((x, binary_feature_expanded), dim=-1)
+        # Concatenate the transformer output and binary feature along the last dimension
+        concat = torch.cat((transformer_output, binary_feature), dim=1)
 
+        # Pass the concatenated features to the output projection
         logits = self.out_proj(concat)
         return logits
+
 
 class CustomModel(nn.Module):
     def __init__(self, model_name, num_labels):
