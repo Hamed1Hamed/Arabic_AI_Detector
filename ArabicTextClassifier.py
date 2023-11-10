@@ -27,14 +27,17 @@ class CustomClassifierHead(nn.Module):
         self.out_proj = nn.Linear(hidden_size * 2, num_labels)
 
     def forward(self, transformer_output, binary_feature):
+        # Ensure transformer_output is 2D [batch_size, hidden_size]
         x = self.dense(transformer_output)
         x = self.dropout(x)
-        # Process the binary feature
-        binary_feature = binary_feature.unsqueeze(1)  # Add an extra dimension
-        binary_feature = self.binary_feature(binary_feature)
-        # Concatenate the transformer output and binary feature
-        concat = torch.cat((x, binary_feature), dim=1)
-        # Pass the concatenated features to the output projection
+
+        # Ensure binary_feature is 1D [batch_size], then expand to [batch_size, hidden_size]
+        binary_feature = binary_feature.unsqueeze(-1)
+        binary_feature_expanded = self.binary_feature(binary_feature)
+
+        # Concatenate along the feature dimension (assuming x is [batch_size, hidden_size])
+        concat = torch.cat((x, binary_feature_expanded), dim=-1)
+
         logits = self.out_proj(concat)
         return logits
 
@@ -48,11 +51,21 @@ class CustomModel(nn.Module):
         self.classifier = CustomClassifierHead(hidden_size, num_labels)
 
     def forward(self, input_ids, attention_mask, ai_indicator):
-        # Get the output from the pre-trained transformer
-        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
-        sequence_output = outputs.last_hidden_state[:, 0, :]  # Take [CLS] token
-        # Forward through the custom classifier head
-        logits = self.classifier(sequence_output, ai_indicator)
+        # Get transformer outputs
+        transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
+        # Typically, we take the output corresponding to the [CLS] token
+        sequence_output = transformer_outputs.last_hidden_state[:, 0, :]
+
+        # Process ai_indicator to match dimensions if necessary
+        # For example, if ai_indicator needs to be expanded to match in feature size
+        ai_indicator = ai_indicator.unsqueeze(-1).expand(-1, sequence_output.size(-1))
+
+        # Now, you can concatenate along the appropriate dimension (feature dimension)
+        combined_input = torch.cat((sequence_output, ai_indicator), dim=1)
+
+        # Pass combined input through the classifier to get logits
+        logits = self.classifier(combined_input)
+
         return logits
 
 
@@ -171,7 +184,16 @@ class ArabicTextClassifier(nn.Module):
 
         with torch.no_grad():
             for batch in progress_bar:
-                inputs, ai_indicator, labels = batch  # Unpack the ai_indicator tensor
+                inputs, ai_indicator, labels = batch
+                print(f"Input IDs shape: {inputs['input_ids'].shape}")  # Should be [batch_size, seq_length]
+                print(f"Attention mask shape: {inputs['attention_mask'].shape}")  # Should be [batch_size, seq_length]
+                print(f"AI indicator shape: {ai_indicator.shape}")  # Should be [batch_size, 1] or [batch_size]
+
+                # If ai_indicator is expected to be a 1D tensor but is actually 2D (e.g., [batch_size, 1]),
+                # you might need to squeeze it to match dimensions:
+                # ai_indicator = ai_indicator.squeeze(1)
+
+
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 ai_indicator = ai_indicator.to(self.device)  # Move ai_indicator to the correct device
                 labels = labels.to(self.device)
