@@ -91,7 +91,7 @@ class ArabicTextClassifier(nn.Module):
             raise TypeError("train_loader and val_loader must be DataLoader instances.")
         self.model.to(self.device)  # Make sure this is done before training begins
         # Initialize the scheduler
-        scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=5)
+        scheduler = CosineAnnealingLR(self.optimizer, T_max=len(train_loader)*self.epochs, eta_min=0)
         self.logger.info('Training process started.')
 
         for epoch in range(start_epoch, self.epochs):
@@ -119,6 +119,8 @@ class ArabicTextClassifier(nn.Module):
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 self.optimizer.step()
+                # Update the scheduler after each batch
+                scheduler.step()
 
                 predictions = torch.argmax(logits, dim=-1)
                 correct_train_preds += torch.sum(predictions == labels).item()
