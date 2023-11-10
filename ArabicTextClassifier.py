@@ -27,19 +27,16 @@ class CustomClassifierHead(nn.Module):
         self.out_proj = nn.Linear(hidden_size * 2, num_labels)
 
     def forward(self, transformer_output, binary_feature):
-        # Ensure binary_feature is 1D [batch_size], then unsqueeze to [batch_size, 1]
-        if binary_feature.dim() == 1:
-            binary_feature = binary_feature.unsqueeze(1)
-        elif binary_feature.dim() == 3:
-            binary_feature = binary_feature.squeeze()  # Correcting the shape if it's [batch_size, 1, 1]
+        # Assuming transformer_output is [batch_size, hidden_size]
+        x = self.dense(transformer_output)
+        x = self.dropout(x)
 
-        # Process the binary feature to make it [batch_size, hidden_size]
-        binary_feature = self.binary_feature(binary_feature)
+        # Assuming binary_feature is [batch_size, 1]
+        binary_feature = self.binary_feature(binary_feature)  # Now [batch_size, hidden_size]
 
-        # Concatenate the transformer output and binary feature along the last dimension
-        concat = torch.cat((transformer_output, binary_feature), dim=1)
+        # Concatenate the transformer output and binary feature
+        concat = torch.cat((x, binary_feature), dim=-1)  # Ensure the dimension is correct
 
-        # Pass the concatenated features to the output projection
         logits = self.out_proj(concat)
         return logits
 
@@ -54,20 +51,11 @@ class CustomModel(nn.Module):
         self.classifier = CustomClassifierHead(hidden_size, num_labels)
 
     def forward(self, input_ids, attention_mask, ai_indicator):
-        # Get transformer outputs
         transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
-        # Typically, we take the output corresponding to the [CLS] token
-        sequence_output = transformer_outputs.last_hidden_state[:, 0, :]
+        sequence_output = transformer_outputs.last_hidden_state[:, 0, :]  # [CLS] token, shape [batch_size, hidden_size]
 
-        # Process ai_indicator to match dimensions if necessary
-        # For example, if ai_indicator needs to be expanded to match in feature size
-        ai_indicator = ai_indicator.unsqueeze(-1).expand(-1, sequence_output.size(-1))
-
-        # Now, you can concatenate along the appropriate dimension (feature dimension)
-        combined_input = torch.cat((sequence_output, ai_indicator), dim=1)
-
-        # Pass combined input through the classifier to get logits
-        logits = self.classifier(combined_input)
+        # No need to expand ai_indicator here because it should already be [batch_size, hidden_size]
+        logits = self.classifier(sequence_output, ai_indicator)
 
         return logits
 
@@ -86,6 +74,7 @@ class ArabicTextClassifier(nn.Module):
         self.val_losses = []
         self.train_accuracies = []
         self.val_accuracies = []
+        self.loss_fn = torch.nn.CrossEntropyLoss()
 
     def forward(self, input_ids, attention_mask, binary_feature):
         return self.model(input_ids, attention_mask, binary_feature)
@@ -96,6 +85,7 @@ class ArabicTextClassifier(nn.Module):
     def train(self, train_loader, val_loader, start_epoch=0):
         best_val_loss = float('inf')
         epochs_without_improvement = 0  # Counter for early stopping
+
 
         if not isinstance(train_loader, DataLoader) or not isinstance(val_loader, DataLoader):
             raise TypeError("train_loader and val_loader must be DataLoader instances.")
@@ -121,7 +111,8 @@ class ArabicTextClassifier(nn.Module):
                 self.optimizer.zero_grad()
                 logits = self.model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'],
                                     ai_indicator=ai_indicator)
-                loss = torch.nn.functional.cross_entropy(logits, labels)  # Calculate loss
+                # loss = torch.nn.functional.cross_entropy(logits, labels)  # Calculate loss
+                loss = self.loss_fn(logits, labels)
 
                 loss_value = loss.item()
                 total_train_loss += loss_value
@@ -206,7 +197,7 @@ class ArabicTextClassifier(nn.Module):
 
 
                 # Compute loss using the logits and the labels
-                loss = loss_fn(logits, labels)
+                loss = self.loss_fn(logits, labels)
                 total_val_loss += loss.item()
 
                 # Get the predictions from the logits
