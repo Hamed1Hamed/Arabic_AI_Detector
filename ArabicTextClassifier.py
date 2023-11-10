@@ -181,9 +181,9 @@ class ArabicTextClassifier(nn.Module):
         with torch.no_grad():
             for batch in progress_bar:
                 inputs, ai_indicator, labels = batch
-                print(f"Input IDs shape: {inputs['input_ids'].shape}")  # Should be [batch_size, seq_length]
-                print(f"Attention mask shape: {inputs['attention_mask'].shape}")  # Should be [batch_size, seq_length]
-                print(f"AI indicator shape: {ai_indicator.shape}")  # Should be [batch_size, 1] or [batch_size]
+                # print(f"Input IDs shape: {inputs['input_ids'].shape}")  # Should be [batch_size, seq_length]
+                # print(f"Attention mask shape: {inputs['attention_mask'].shape}")  # Should be [batch_size, seq_length]
+                # print(f"AI indicator shape: {ai_indicator.shape}")  # Should be [batch_size, 1] or [batch_size]
 
                 # If ai_indicator is expected to be a 1D tensor but is actually 2D (e.g., [batch_size, 1]),
                 # you might need to squeeze it to match dimensions:
@@ -326,10 +326,16 @@ class ArabicTextClassifier(nn.Module):
         # Define the labels for the confusion matrix
         classes = ['AI-generated', 'Human-written']
 
+        # Compute confusion matrix
         cm = confusion_matrix(y_true, y_pred)
+
+        # Calculate sensitivity and specificity
+        sensitivity = cm[1, 1] / (cm[1, 1] + cm[1, 0])
+        specificity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
+
         plt.figure(figsize=(6, 6))
         plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-        plt.title('Confusion Matrix')
+        plt.title(f'Confusion Matrix\nSensitivity: {sensitivity:.2f}, Specificity: {specificity:.2f}')
         plt.colorbar()
 
         tick_marks = np.arange(len(classes))
@@ -337,8 +343,8 @@ class ArabicTextClassifier(nn.Module):
         plt.yticks(tick_marks, classes)
 
         # Label the axes
-        plt.xlabel('Predicted Label')
-        plt.ylabel('True Label')
+        plt.xlabel('Predicted Class')
+        plt.ylabel('Actual Class')
 
         # Loop over the data locations to create text annotations
         fmt = 'd'
