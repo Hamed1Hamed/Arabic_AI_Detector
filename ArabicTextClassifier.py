@@ -163,7 +163,7 @@ class ArabicTextClassifier(nn.Module):
             avg_val_loss, val_accuracy = self.evaluate(val_loader)
 
             # Scheduler step with the validation loss
-            
+
 
             # Checkpoint if this is the best model
             if avg_val_loss < best_val_loss:
