@@ -20,29 +20,32 @@ import torch.nn as nn
 class CustomClassifierHead(nn.Module):
     def __init__(self, hidden_size, num_labels):
         super(CustomClassifierHead, self).__init__()
-        # The transformer model output size (e.g., 768 for BERT-base)
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(0.1)
-        # Additional input for the binary feature
+
+        # Additional inputs for binary_feature and char_count_feature
         self.binary_feature = nn.Linear(1, hidden_size)
-        self.out_proj = nn.Linear(hidden_size * 3, num_labels)  # Change input size to include Char_Count
+        self.char_count_feature = nn.Linear(1, hidden_size)
+
+        # Adjust the size to accommodate the additional features
+        self.out_proj = nn.Linear(hidden_size + 2 * hidden_size, num_labels)  # hidden_size for each: transformer output, binary feature, char count feature
 
     def forward(self, transformer_output, binary_feature, char_count_feature):
-        # Assuming transformer_output is [batch_size, hidden_size]
+        # Process the transformer output
         x = self.dense(transformer_output)
         x = self.dropout(x)
 
-        # Assuming binary_feature is [batch_size, 1]
-        binary_feature = self.binary_feature(binary_feature)  # Now [batch_size, hidden_size]
-
-        # Assuming char_count_feature is [batch_size, 1]
-        char_count_feature = self.binary_feature(char_count_feature)  # Now [batch_size, hidden_size]
+        # Process binary_feature and char_count_feature
+        binary_feature_processed = self.binary_feature(binary_feature)
+        char_count_feature_processed = self.char_count_feature(char_count_feature)
 
         # Concatenate the transformer output, binary feature, and char_count feature
-        concat = torch.cat((x, binary_feature, char_count_feature), dim=-1)  # Ensure the dimension is correct
+        concat = torch.cat((x, binary_feature_processed, char_count_feature_processed), dim=-1)
 
+        # Compute final logits
         logits = self.out_proj(concat)
         return logits
+
 
 
 class CustomModel(nn.Module):
@@ -51,24 +54,18 @@ class CustomModel(nn.Module):
         # Load the pre-trained model
         self.transformer = XLMRobertaForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
         hidden_size = self.transformer.config.hidden_size
-        # Additional input for the binary feature
-        self.binary_feature = nn.Linear(1, hidden_size)
-        self.char_count_feature = nn.Linear(1, hidden_size)  # Add the Char_Count feature layer
+
+        # Additional input for the binary feature and char count feature
+        self.feature_combiner = CustomClassifierHead(hidden_size, num_labels)
 
     def forward(self, input_ids, attention_mask, ai_indicator, char_count_feature):
         transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
         logits = transformer_outputs.logits
 
-        # Assuming binary_feature is [batch_size, 1]
-        binary_feature = self.binary_feature(ai_indicator)
-        char_count_feature = self.char_count_feature(char_count_feature)  # Process Char_Count feature
-
         # Combine transformer output, binary feature, and char_count feature
-        combined = transformer_outputs.last_hidden_state[:, 0, :] + binary_feature + char_count_feature
+        combined_logits = self.feature_combiner(logits, ai_indicator, char_count_feature)
 
-        # You can further process the combined representation before classification if necessary
-
-        return logits
+        return combined_logits
 
 
 
@@ -124,8 +121,13 @@ class ArabicTextClassifier(nn.Module):
                 labels = labels.to(self.device)
 
                 self.optimizer.zero_grad()
-                logits = self.model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'],
-                                    ai_indicator=ai_indicator)
+                logits = self.model(
+                    input_ids=inputs['input_ids'],
+                    attention_mask=inputs['attention_mask'],
+                    ai_indicator=ai_indicator,
+                    char_count_feature=inputs['char_count']  # Pass char_count_feature here
+                )
+
                 # loss = torch.nn.functional.cross_entropy(logits, labels)  # Calculate loss
                 loss = self.loss_fn(logits, labels)
 
@@ -199,8 +201,12 @@ class ArabicTextClassifier(nn.Module):
                 labels = labels.to(self.device)
 
                 # Forward pass through the model to get logits
-                logits = self.model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'],
-                                    ai_indicator=ai_indicator)
+                logits = self.model(
+                    input_ids=inputs['input_ids'],
+                    attention_mask=inputs['attention_mask'],
+                    ai_indicator=ai_indicator,
+                    char_count_feature=inputs['char_count']  # Pass char_count_feature here
+                )
 
                 # Compute loss using the logits and the labels
                 loss = self.loss_fn(logits, labels)
