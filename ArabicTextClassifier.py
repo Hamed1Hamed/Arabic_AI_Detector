@@ -1,5 +1,6 @@
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, AdamW, get_linear_schedule_with_warmup
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from transformers import XLMRobertaForSequenceClassification
+from transformers import XLMRobertaTokenizer
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, roc_auc_score, accuracy_score
 import matplotlib.pyplot as plt
 import numpy as np
@@ -45,19 +46,25 @@ class CustomModel(nn.Module):
     def __init__(self, model_name, num_labels):
         super(CustomModel, self).__init__()
         # Load the pre-trained model
-        self.transformer = AutoModel.from_pretrained(model_name)
+        self.transformer = XLMRobertaForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
         hidden_size = self.transformer.config.hidden_size
-        # Use the custom classifier head
-        self.classifier = CustomClassifierHead(hidden_size, num_labels)
+        # Additional input for the binary feature
+        self.binary_feature = nn.Linear(1, hidden_size)
 
     def forward(self, input_ids, attention_mask, ai_indicator):
         transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
-        sequence_output = transformer_outputs.last_hidden_state[:, 0, :]  # [CLS] token, shape [batch_size, hidden_size]
+        logits = transformer_outputs.logits
 
-        # No need to expand ai_indicator here because it should already be [batch_size, hidden_size]
-        logits = self.classifier(sequence_output, ai_indicator)
+        # Assuming binary_feature is [batch_size, 1]
+        binary_feature = self.binary_feature(ai_indicator)
+
+        # Combine transformer output and binary feature
+        combined = transformer_outputs.last_hidden_state[:, 0, :] + binary_feature  # Adjust this as needed
+
+        # You can further process the combined representation before classification if necessary
 
         return logits
+
 
 
 
@@ -76,8 +83,10 @@ class ArabicTextClassifier(nn.Module):
         self.val_accuracies = []
         self.loss_fn = torch.nn.CrossEntropyLoss()
 
-    def forward(self, input_ids, attention_mask, binary_feature):
-        return self.model(input_ids, attention_mask, binary_feature)
+    def forward(self, input_ids, attention_mask, ai_indicator):
+        return self.model(input_ids, attention_mask, ai_indicator)
+
+
 
     #----------------------------------------------------------------Training and Evaluation Functions-------------------------------------------------------------
 
