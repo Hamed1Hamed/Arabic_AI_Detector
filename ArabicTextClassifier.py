@@ -1,5 +1,6 @@
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, AdamW, get_linear_schedule_with_warmup
 from transformers import XLMRobertaForSequenceClassification
+from torch.optim import AdamW
+
 from transformers import XLMRobertaTokenizer
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, roc_auc_score, accuracy_score
 import matplotlib.pyplot as plt
@@ -11,11 +12,17 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 import os
-logging.basicConfig(filename='classifier.log', level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
+from transformers import XLMRobertaModel
+import logging
 import json
 from transformers import AutoModel
 import torch
 import torch.nn as nn
+
+
+logging.basicConfig(filename='classifier.log', level=logging.INFO, format='%(asctime)s - %(message)s',
+                    datefmt='%d-%b-%y %H:%M:%S')
+
 
 class CustomClassifierHead(nn.Module):
     def __init__(self, hidden_size, num_labels):
@@ -47,7 +54,7 @@ class CustomClassifierHead(nn.Module):
         return logits
 
 
-from transformers import XLMRobertaModel
+
 
 class CustomModel(nn.Module):
     def __init__(self, model_name, num_labels):
@@ -63,9 +70,6 @@ class CustomModel(nn.Module):
 
         final_logits = self.custom_head(hidden_state, ai_indicator, char_count_feature)
         return final_logits
-
-
-
 
 
 class ArabicTextClassifier(nn.Module):
@@ -86,9 +90,7 @@ class ArabicTextClassifier(nn.Module):
     def forward(self, input_ids, attention_mask, ai_indicator, char_count_feature):
         return self.model(input_ids, attention_mask, ai_indicator, char_count_feature)
 
-
-
-    #----------------------------------------------------------------Training and Evaluation Functions-------------------------------------------------------------
+    # ----------------------------------------------------------------Training and Evaluation Functions-------------------------------------------------------------
 
     def train(self, train_loader, val_loader, test_loader, start_epoch=0):
         best_val_loss = float('inf')
@@ -114,7 +116,7 @@ class ArabicTextClassifier(nn.Module):
             for batch in progress_bar:
                 inputs, ai_indicator, labels = batch  # Unpack the ai_indicator tensor
 
-                #for debugging purposes
+                # for debugging purposes
                 # # Print shapes of inputs, ai_indicator, and labels
                 # print("Shape of input_ids:", inputs['input_ids'].shape)
                 # print("Shape of attention_mask:", inputs['attention_mask'].shape)
@@ -161,7 +163,7 @@ class ArabicTextClassifier(nn.Module):
             avg_val_loss, val_accuracy = self.evaluate(val_loader)
 
             # Scheduler step with the validation loss
-            scheduler.step(avg_val_loss)
+            
 
             # Checkpoint if this is the best model
             if avg_val_loss < best_val_loss:
@@ -241,8 +243,8 @@ class ArabicTextClassifier(nn.Module):
 
         return avg_val_loss, val_accuracy
 
-    #save()	Saves the model and tokenizer at a specified file path.
-#save_best_model()	Saves the best model and tokenizer based on a specific metric.
+    # save()	Saves the model and tokenizer at a specified file path.
+    # save_best_model()	Saves the best model and tokenizer based on a specific metric.
     def save_best_model(self):
         # Save the best model without including the epoch in the filename
         model_save_path = os.path.join(self.checkpoint_path, "best_model.pt")
@@ -319,7 +321,7 @@ class ArabicTextClassifier(nn.Module):
         # if not losses or not accuracies:
         #     self.logger.warning('Not enough data to plot metrics.')
         #     return
-        #------- plotting the metrics ------------#
+        # ------- plotting the metrics ------------#
         # Plot losses
         plt.subplot(1, 2, 1)
         plt.plot(epochs_range, losses, label=loss_label)
