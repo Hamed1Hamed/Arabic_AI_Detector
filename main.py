@@ -3,9 +3,7 @@ import json
 from ArabicTextDataset import ArabicTextDataset
 from ArabicTextDataLoader import ArabicTextDataLoader
 from ArabicTextClassifier import ArabicTextClassifier
-from transformers import AutoModelForSequenceClassification as ArabertModel, AutoTokenizer, \
-    AutoModelForSequenceClassification
-from transformers import AutoTokenizer as ArabertTokenizer
+from transformers import AutoTokenizer
 import logging
 
 def main():
@@ -42,7 +40,6 @@ def main():
         num_workers=4,
         pin_memory=True
     )
-
     train_loader, val_loader, test_loader = data_loader.get_data_loaders()
 
     # Initialize the classifier
