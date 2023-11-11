@@ -81,17 +81,16 @@ class ArabicTextClassifier(nn.Module):
 
     #----------------------------------------------------------------Training and Evaluation Functions-------------------------------------------------------------
 
-
-    def train(self, train_loader, val_loader, start_epoch=0):
+    def train(self, train_loader, val_loader, test_loader, start_epoch=0):
         best_val_loss = float('inf')
         epochs_without_improvement = 0  # Counter for early stopping
 
-
-        if not isinstance(train_loader, DataLoader) or not isinstance(val_loader, DataLoader):
-            raise TypeError("train_loader and val_loader must be DataLoader instances.")
+        if not isinstance(train_loader, DataLoader) or not isinstance(val_loader, DataLoader) or not isinstance(
+                test_loader, DataLoader):
+            raise TypeError("train_loader, val_loader, and test_loader must be DataLoader instances.")
         self.model.to(self.device)  # Make sure this is done before training begins
         # Initialize the scheduler
-        scheduler = CosineAnnealingLR(self.optimizer, T_max=len(train_loader)*self.epochs, eta_min=0)
+        scheduler = CosineAnnealingLR(self.optimizer, T_max=len(train_loader) * self.epochs, eta_min=0)
         self.logger.info('Training process started.')
 
         for epoch in range(start_epoch, self.epochs):
@@ -135,7 +134,7 @@ class ArabicTextClassifier(nn.Module):
             train_accuracy = correct_train_preds / max(total_train_preds, 1)
             self.logger.info(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Train Acc: {train_accuracy}")
 
-            # Validation step
+            # Validation step after each epoch
             avg_val_loss, val_accuracy = self.evaluate(val_loader)
 
             # Scheduler step with the validation loss
@@ -146,13 +145,6 @@ class ArabicTextClassifier(nn.Module):
                 best_val_loss = avg_val_loss
                 epochs_without_improvement = 0
                 self.save_best_model()  # Save only the best model
-            else:
-                epochs_without_improvement += 1
-
-            # Early stopping (if uncommented)
-            # if epochs_without_improvement >= self.patience:
-            #     self.logger.info("Early stopping triggered.")
-            #     break
 
             # Record metrics for each epoch
             self.train_losses.append(avg_train_loss)
@@ -160,7 +152,11 @@ class ArabicTextClassifier(nn.Module):
             self.train_accuracies.append(train_accuracy)
             self.val_accuracies.append(val_accuracy)
 
-        self.logger.info('Training process has ended.')
+        self.logger.info('Training process completed. Starting testing on the test set.')
+
+        # Testing on the test set after all epochs
+        avg_test_loss, test_accuracy = self.evaluate(test_loader)
+        self.logger.info(f"Test Loss: {avg_test_loss}, Test Accuracy: {test_accuracy}")
 
     def evaluate(self, val_loader):
         self.model.eval()
