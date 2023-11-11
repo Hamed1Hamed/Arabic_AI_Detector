@@ -23,12 +23,12 @@ class CustomClassifierHead(nn.Module):
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(0.1)
 
-        # Additional inputs for binary_feature and char_count_feature
-        self.binary_feature = nn.Linear(1, hidden_size)
-        self.char_count_feature = nn.Linear(1, hidden_size)
+        # Separate linear layers for binary_feature and char_count_feature
+        self.binary_feature_layer = nn.Linear(1, hidden_size)
+        self.char_count_feature_layer = nn.Linear(1, hidden_size)
 
-        # Adjust the size to accommodate the additional features
-        self.out_proj = nn.Linear(hidden_size + 2 * hidden_size, num_labels)  # hidden_size for each: transformer output, binary feature, char count feature
+        # Output projection layer
+        self.out_proj = nn.Linear(hidden_size * 3, num_labels)
 
     def forward(self, transformer_output, binary_feature, char_count_feature):
         # Process the transformer output
@@ -36,8 +36,8 @@ class CustomClassifierHead(nn.Module):
         x = self.dropout(x)
 
         # Process binary_feature and char_count_feature
-        binary_feature_processed = self.binary_feature(binary_feature)
-        char_count_feature_processed = self.char_count_feature(char_count_feature)
+        binary_feature_processed = self.binary_feature_layer(binary_feature)
+        char_count_feature_processed = self.char_count_feature_layer(char_count_feature)
 
         # Concatenate the transformer output, binary feature, and char_count feature
         concat = torch.cat((x, binary_feature_processed, char_count_feature_processed), dim=-1)
@@ -47,25 +47,23 @@ class CustomClassifierHead(nn.Module):
         return logits
 
 
+from transformers import XLMRobertaModel
 
 class CustomModel(nn.Module):
     def __init__(self, model_name, num_labels):
         super(CustomModel, self).__init__()
-        # Load the pre-trained model
-        self.transformer = XLMRobertaForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
-        hidden_size = self.transformer.config.hidden_size
-
-        # Additional input for the binary feature and char count feature
-        self.feature_combiner = CustomClassifierHead(hidden_size, num_labels)
+        # Use XLMRobertaModel to get hidden states
+        self.transformer = XLMRobertaModel.from_pretrained(model_name)
+        self.custom_head = CustomClassifierHead(self.transformer.config.hidden_size, num_labels)
 
     def forward(self, input_ids, attention_mask, ai_indicator, char_count_feature):
         transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
-        logits = transformer_outputs.logits
+        # Get the last hidden state
+        hidden_state = transformer_outputs.last_hidden_state[:, 0, :]
 
-        # Combine transformer output, binary feature, and char_count feature
-        combined_logits = self.feature_combiner(logits, ai_indicator, char_count_feature)
+        final_logits = self.custom_head(hidden_state, ai_indicator, char_count_feature)
+        return final_logits
 
-        return combined_logits
 
 
 
@@ -116,6 +114,13 @@ class ArabicTextClassifier(nn.Module):
             for batch in progress_bar:
                 inputs, ai_indicator, labels = batch  # Unpack the ai_indicator tensor
 
+                #for debugging purposes
+                # # Print shapes of inputs, ai_indicator, and labels
+                # print("Shape of input_ids:", inputs['input_ids'].shape)
+                # print("Shape of attention_mask:", inputs['attention_mask'].shape)
+                # print("Shape of ai_indicator:", ai_indicator.shape)
+                # print("Shape of char_count_feature:", inputs['char_count'].shape)
+                # print("Shape of labels:", labels.shape)
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 ai_indicator = ai_indicator.to(self.device)  # Move ai_indicator to the correct device
                 labels = labels.to(self.device)
