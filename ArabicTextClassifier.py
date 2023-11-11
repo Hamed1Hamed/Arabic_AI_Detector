@@ -95,14 +95,14 @@ class ArabicTextClassifier(nn.Module):
 
     #----------------------------------------------------------------Training and Evaluation Functions-------------------------------------------------------------
 
-    def train(self, train_loader, val_loader, test_loader, char_count_loader, start_epoch=0):
+    def train(self, train_loader, val_loader, test_loader, start_epoch=0):
         best_val_loss = float('inf')
         epochs_without_improvement = 0  # Counter for early stopping
 
         if not isinstance(train_loader, DataLoader) or not isinstance(val_loader, DataLoader) or not isinstance(
-                test_loader, DataLoader) or not isinstance(char_count_loader, DataLoader):
+                test_loader, DataLoader):
             raise TypeError(
-                "train_loader, val_loader, test_loader, and char_count_loader must be DataLoader instances.")
+                "train_loader, val_loader, and test_loader must be DataLoader instances.")
         self.model.to(self.device)  # Make sure this is done before training begins
         # Initialize the scheduler
         scheduler = CosineAnnealingLR(self.optimizer, T_max=len(train_loader) * self.epochs, eta_min=0)
@@ -116,18 +116,16 @@ class ArabicTextClassifier(nn.Module):
 
             progress_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{self.epochs}", leave=True)
 
-            for batch, char_count_batch in zip(progress_bar, char_count_loader):
+            for batch in progress_bar:
                 inputs, ai_indicator, labels = batch  # Unpack the ai_indicator tensor
-                char_count_feature = char_count_batch  # Extract Char_Count feature from char_count_loader
 
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 ai_indicator = ai_indicator.to(self.device)  # Move ai_indicator to the correct device
-                char_count_feature = char_count_feature.to(self.device)  # Move Char_Count feature to the correct device
                 labels = labels.to(self.device)
 
                 self.optimizer.zero_grad()
                 logits = self.model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'],
-                                    ai_indicator=ai_indicator, char_count_feature=char_count_feature)
+                                    ai_indicator=ai_indicator)
                 # loss = torch.nn.functional.cross_entropy(logits, labels)  # Calculate loss
                 loss = self.loss_fn(logits, labels)
 
@@ -176,7 +174,7 @@ class ArabicTextClassifier(nn.Module):
         avg_test_loss, test_accuracy = self.evaluate(test_loader)
         self.logger.info(f"Test Loss: {avg_test_loss}, Test Accuracy: {test_accuracy}")
 
-    def evaluate(self, val_loader, char_count_loader):
+    def evaluate(self, val_loader):
         self.model.eval()
         self.model.to(self.device)  # Make sure this is done before evaluation
         total_val_loss = 0
@@ -190,22 +188,19 @@ class ArabicTextClassifier(nn.Module):
         if not hasattr(self, 'evaluation_accuracies'):
             self.evaluation_accuracies = []
 
-        progress_bar = tqdm(zip(val_loader, char_count_loader), desc="Evaluating", leave=True)
+        progress_bar = tqdm(val_loader, desc="Evaluating", leave=True)
 
         with torch.no_grad():
-            for (batch, char_count_batch) in progress_bar:
+            for batch in progress_bar:
                 inputs, ai_indicator, labels = batch
-                char_count_feature = char_count_batch  # Extract Char_Count feature from char_count_loader
 
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 ai_indicator = ai_indicator.to(self.device)  # Move ai_indicator to the correct device
-                char_count_feature = char_count_feature.to(self.device)  # Move Char_Count feature to the correct device
                 labels = labels.to(self.device)
 
                 # Forward pass through the model to get logits
                 logits = self.model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'],
-                                    ai_indicator=ai_indicator,
-                                    char_count_feature=char_count_feature)
+                                    ai_indicator=ai_indicator)
 
                 # Compute loss using the logits and the labels
                 loss = self.loss_fn(logits, labels)

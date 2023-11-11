@@ -25,7 +25,6 @@ def main():
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-
     # Initialize datasets
     train_dataset = ArabicTextDataset(tokenizer, 'train', indicator_phrases_path)
     val_dataset = ArabicTextDataset(tokenizer, 'val', indicator_phrases_path)
@@ -56,10 +55,10 @@ def main():
 
     # Train and evaluate
     try:
-        classifier.train(train_loader, val_loader)
+        classifier.train(train_loader, val_loader, test_loader)  # Remove char_count_loader here
 
         # Evaluate on test data
-        classifier.evaluate(test_loader)
+        classifier.evaluate(val_loader)  # Remove char_count_loader here
 
         # Plot training/validation metrics
         classifier.plot_metrics()
@@ -77,7 +76,6 @@ def main():
 
     except Exception as e:
         logging.error(f"An error occurred: {str(e)}")
-
 
 if __name__ == '__main__':
     main()
