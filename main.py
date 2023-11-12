@@ -5,7 +5,11 @@ from ArabicTextDataLoader import ArabicTextDataLoader
 from ArabicTextClassifier import ArabicTextClassifier
 from transformers import AutoTokenizer
 import logging
-
+"""
+ the best model will be saved in the "model_checkpoints" folder with the filename "best_model.pt".
+ after training and evaluation, your model will be saved in a folder named "final_model" with the filename "Saved_AI_Arabic_Detector_Model"
+ 
+"""
 def main():
     print("Current Working Directory:", os.getcwd())
     print("Directory exists:", os.path.exists('./model_checkpoints/'))
@@ -21,7 +25,7 @@ def main():
     batch_size = config['batch_size']
     model_path = config['final_model_path']
     indicator_phrases_path = config['indicator_phrases_path']  # Load the indicator phrases path
-
+    model_checkpoints= config['checkpoint_path'] # Load the model checkpoints path
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
@@ -47,29 +51,36 @@ def main():
         num_labels=2,
         learning_rate=config['learning_rate'],
         epochs=config['epochs'],
-        checkpoint_path=config['checkpoint_path']
+        checkpoint_path=model_checkpoints
     )
+
+    # Load the best model if it exists, else start training from scratch
+    best_model_path = os.path.join(model_checkpoints, "best_model.pt")
+    if os.path.isfile(best_model_path):
+        print("Loading the best model...")
+        classifier.load_best_model()
+    else:
+        print("No best model found. Starting training from scratch.")
 
     # Move classifier to the appropriate device
     classifier.to(classifier.device)
 
     # Train and evaluate
     try:
-        classifier.train(train_loader, val_loader, test_loader)  # Remove char_count_loader here
+        classifier.train(train_loader, val_loader, test_loader)
 
         # Evaluate on test data
-        classifier.evaluate(val_loader)  # Remove char_count_loader here
+        classifier.evaluate(val_loader)
 
         # Plot training/validation metrics
         classifier.plot_metrics()
 
         # Save final model
-        save_path = os.path.join(config['final_model_path'], 'Saved_AI_Arabic_Detector_Model')
+        save_path = os.path.join(model_path, 'Saved_AI_Arabic_Detector_Model')
         classifier.save(save_path)
 
         # Check if the best model was saved during training
-        checkpoint_dir = config['checkpoint_path']  # Use the path from the configuration
-        if os.path.isfile(os.path.join(checkpoint_dir, "best_model.pt")):
+        if os.path.isfile(best_model_path):
             print("The best model was saved successfully.")
         else:
             print("The best model was not saved.")

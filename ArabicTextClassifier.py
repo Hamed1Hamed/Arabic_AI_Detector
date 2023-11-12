@@ -88,7 +88,13 @@ class ArabicTextClassifier(nn.Module):
         return self.model(input_ids, attention_mask, ai_indicator, char_count_feature)
 
     # ----------------------------------------------------------------Training and Evaluation Functions-------------------------------------------------------------
-
+    def load_best_model(self):
+        model_path = os.path.join(self.checkpoint_path, "best_model.pt")
+        if os.path.exists(model_path):
+            self.model.load_state_dict(torch.load(model_path))
+            self.logger.info(f"Loaded best model from {model_path}")
+        else:
+            self.logger.info("No best model checkpoint found.")
     def train(self, train_loader, val_loader, test_loader, start_epoch=0):
         best_val_loss = float('inf')
         epochs_without_improvement = 0  # Counter for early stopping
@@ -112,14 +118,6 @@ class ArabicTextClassifier(nn.Module):
 
             for batch in progress_bar:
                 inputs, ai_indicator, labels = batch  # Unpack the ai_indicator tensor
-
-                # for debugging purposes
-                # # Print shapes of inputs, ai_indicator, and labels
-                # print("Shape of input_ids:", inputs['input_ids'].shape)
-                # print("Shape of attention_mask:", inputs['attention_mask'].shape)
-                # print("Shape of ai_indicator:", ai_indicator.shape)
-                # print("Shape of char_count_feature:", inputs['char_count'].shape)
-                # print("Shape of labels:", labels.shape)
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 ai_indicator = ai_indicator.to(self.device)  # Move ai_indicator to the correct device
                 labels = labels.to(self.device)
