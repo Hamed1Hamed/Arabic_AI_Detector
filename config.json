@@ -1,11 +1,11 @@
 {
-    "learning_rate": 0.001,
+    "learning_rate": 0.0001,
     "model_name": "xlm-roberta-base",
     "epochs": 10,
     "batch_size": 64,
     "root_folder": "Dataset",
     "model_save_path": "saved_model",
-    "final_model_path": "model_final_save",
+    "final_model_path": "final_model",
     "checkpoint_path": "model_checkpoints",
     "patience": 10,
     "indicator_phrases_path": "chatGPT_words_ar.txt"
