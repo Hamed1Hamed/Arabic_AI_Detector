@@ -70,7 +70,7 @@ def main():
         classifier.train(train_loader, val_loader, test_loader)
 
         # Evaluate on test data
-        classifier.evaluate(val_loader)
+        classifier.evaluate(test_loader)
 
         # Plot training/validation metrics
         classifier.plot_metrics()
