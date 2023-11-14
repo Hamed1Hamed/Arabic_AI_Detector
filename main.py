@@ -13,6 +13,7 @@ import logging
 def main():
     print("Current Working Directory:", os.getcwd())
     print("Directory exists:", os.path.exists('./model_checkpoints/'))
+    # Check if the 'final_model' directory exists
 
     # Set up logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,6 +27,10 @@ def main():
     model_path = config['final_model_path']
     indicator_phrases_path = config['indicator_phrases_path']  # Load the indicator phrases path
     model_checkpoints= config['checkpoint_path'] # Load the model checkpoints path
+
+    final_model_path = config['final_model_path']  # Assuming 'config' is already loaded from 'config.json'
+    print("Directory exists ('final_model'):", os.path.exists(f'./{final_model_path}/'))
+
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
@@ -68,9 +73,6 @@ def main():
     # Train and evaluate
     try:
         classifier.train(train_loader, val_loader, test_loader)
-
-        # Evaluate on test data
-        classifier.evaluate(test_loader)
 
         # Plot training/validation metrics
         classifier.plot_metrics()

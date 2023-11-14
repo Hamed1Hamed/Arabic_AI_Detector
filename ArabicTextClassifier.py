@@ -95,6 +95,7 @@ class ArabicTextClassifier(nn.Module):
             self.logger.info(f"Loaded best model from {model_path}")
         else:
             self.logger.info("No best model checkpoint found.")
+
     def train(self, train_loader, val_loader, test_loader, start_epoch=0):
         best_val_loss = float('inf')
         epochs_without_improvement = 0  # Counter for early stopping
@@ -155,7 +156,7 @@ class ArabicTextClassifier(nn.Module):
             self.logger.info(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Train Acc: {train_accuracy}")
 
             # Validation step after each epoch
-            avg_val_loss, val_accuracy = self.evaluate(val_loader)
+            avg_val_loss, val_accuracy = self.evaluate(val_loader, 'validation')
 
             # Scheduler step with the validation loss
 
@@ -175,13 +176,15 @@ class ArabicTextClassifier(nn.Module):
         self.logger.info('Training process completed. Starting testing on the test set.')
 
         # Testing on the test set after all epochs
-        avg_test_loss, test_accuracy = self.evaluate(test_loader)
+        avg_test_loss, test_accuracy = self.evaluate(test_loader, 'testing')
         self.logger.info(f"Test Loss: {avg_test_loss}, Test Accuracy: {test_accuracy}")
 
-    def evaluate(self, val_loader):
+    def evaluate(self, data_loader, context='validation'):
+        assert context in ['validation', 'testing'], "Context must be either 'validation' or 'testing'"
+
         self.model.eval()
-        self.model.to(self.device)  # Make sure this is done before evaluation
-        total_val_loss = 0
+        self.model.to(self.device)
+        total_loss = 0
         y_true = []
         y_pred = []
         correct_preds = 0
@@ -189,32 +192,29 @@ class ArabicTextClassifier(nn.Module):
         loss_fn = torch.nn.CrossEntropyLoss()
 
         # Storage for evaluation metrics if they don't already exist
-        if not hasattr(self, 'evaluation_accuracies'):
-            self.evaluation_accuracies = []
+        if not hasattr(self, f'evaluation_accuracies_{context}'):
+            setattr(self, f'evaluation_accuracies_{context}', [])
 
-        progress_bar = tqdm(val_loader, desc="Evaluating", leave=True)
+        progress_bar = tqdm(data_loader, desc=f"Evaluating ({context})", leave=True)
 
         with torch.no_grad():
             for batch in progress_bar:
                 inputs, ai_indicator, labels = batch
 
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
-                ai_indicator = ai_indicator.to(self.device)  # Move ai_indicator to the correct device
+                ai_indicator = ai_indicator.to(self.device)
                 labels = labels.to(self.device)
 
-                # Forward pass through the model to get logits
                 logits = self.model(
                     input_ids=inputs['input_ids'],
                     attention_mask=inputs['attention_mask'],
                     ai_indicator=ai_indicator,
-                    char_count_feature=inputs['char_count']  # Pass char_count_feature here
+                    char_count_feature=inputs['char_count']
                 )
 
-                # Compute loss using the logits and the labels
                 loss = self.loss_fn(logits, labels)
-                total_val_loss += loss.item()
+                total_loss += loss.item()
 
-                # Get the predictions from the logits
                 predictions = torch.argmax(logits, dim=-1)
                 y_true.extend(labels.cpu().numpy())
                 y_pred.extend(predictions.cpu().numpy())
@@ -222,21 +222,22 @@ class ArabicTextClassifier(nn.Module):
                 correct_preds += (predictions == labels).sum().item()
                 total_preds += labels.size(0)
 
-        avg_val_loss = total_val_loss / len(val_loader)
-        val_accuracy = correct_preds / total_preds
-        # Log or return these metrics as needed
-        self.logger.info(f"Validation Accuracy: {val_accuracy}")
-        self.logger.info(f"Precision: {precision_score(y_true, y_pred, zero_division=0)}")
-        self.logger.info(f"Recall: {recall_score(y_true, y_pred, zero_division=0)}")
-        self.logger.info(f"F1 Score: {f1_score(y_true, y_pred, zero_division=0)}")
-        self.logger.info(f"AUC-ROC: {roc_auc_score(y_true, y_pred)}")
+        avg_loss = total_loss / len(data_loader)
+        accuracy = correct_preds / total_preds
+
+        # Logging metrics
+        self.logger.info(f"{context.capitalize()} Accuracy: {accuracy}")
+        self.logger.info(f"{context.capitalize()} Precision: {precision_score(y_true, y_pred, zero_division=0)}")
+        self.logger.info(f"{context.capitalize()} Recall: {recall_score(y_true, y_pred, zero_division=0)}")
+        self.logger.info(f"{context.capitalize()} F1 Score: {f1_score(y_true, y_pred, zero_division=0)}")
+        self.logger.info(f"{context.capitalize()} AUC-ROC: {roc_auc_score(y_true, y_pred)}")
 
         # Append to the evaluation metrics lists
-        self.evaluation_accuracies.append(val_accuracy)
+        getattr(self, f'evaluation_accuracies_{context}').append(accuracy)
 
-        self.plot_confusion_matrix(y_true, y_pred)
+        self.plot_confusion_matrix(y_true, y_pred, context)
 
-        return avg_val_loss, val_accuracy
+        return avg_loss, accuracy
 
     # save()	Saves the model and tokenizer at a specified file path.
     # save_best_model()	Saves the best model and tokenizer based on a specific metric.
@@ -332,8 +333,9 @@ class ArabicTextClassifier(nn.Module):
         plt.tight_layout()
         plt.show()
 
-    def plot_confusion_matrix(self, y_true, y_pred):
-        self.logger.info('Plotting confusion matrix.')  # Log entry
+    def plot_confusion_matrix(self, y_true, y_pred, context='validation'):
+        assert context in ['validation', 'testing'], "Context must be either 'validation' or 'testing'"
+        self.logger.info(f'Plotting confusion matrix for {context}.')  # Log entry
 
         # Define the labels for the confusion matrix
         classes = ['AI-generated', 'Human-written']
@@ -342,12 +344,13 @@ class ArabicTextClassifier(nn.Module):
         cm = confusion_matrix(y_true, y_pred)
 
         # Calculate sensitivity and specificity
-        sensitivity = cm[1, 1] / (cm[1, 1] + cm[1, 0])
-        specificity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
+        sensitivity = cm[1, 1] / (cm[1, 1] + cm[1, 0]) if cm[1, 1] + cm[1, 0] > 0 else 0
+        specificity = cm[0, 0] / (cm[0, 0] + cm[0, 1]) if cm[0, 0] + cm[0, 1] > 0 else 0
 
         plt.figure(figsize=(6, 6))
         plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-        plt.title(f'Confusion Matrix\nSensitivity: {sensitivity:.2f}, Specificity: {specificity:.2f}')
+        plt.title(
+            f'{context.capitalize()} Confusion Matrix\nSensitivity: {sensitivity:.2f}, Specificity: {specificity:.2f}')
         plt.colorbar()
 
         tick_marks = np.arange(len(classes))
