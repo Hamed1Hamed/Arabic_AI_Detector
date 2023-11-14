@@ -99,6 +99,7 @@ class ArabicTextClassifier(nn.Module):
     def train(self, train_loader, val_loader, test_loader, start_epoch=0):
         best_val_loss = float('inf')
         epochs_without_improvement = 0  # Counter for early stopping
+        final_train_accuracy = 0  # Initialize variable to store final training accuracy
 
         if not isinstance(train_loader, DataLoader) or not isinstance(val_loader, DataLoader) or not isinstance(
                 test_loader, DataLoader):
@@ -154,6 +155,8 @@ class ArabicTextClassifier(nn.Module):
             avg_train_loss = total_train_loss / len(train_loader)
             train_accuracy = correct_train_preds / max(total_train_preds, 1)
             self.logger.info(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Train Acc: {train_accuracy}")
+            # Update final_train_accuracy with the latest training accuracy
+            final_train_accuracy = correct_train_preds / max(total_train_preds, 1)
 
             # Validation step after each epoch
             avg_val_loss, val_accuracy = self.evaluate(val_loader, 'validation')
@@ -172,12 +175,15 @@ class ArabicTextClassifier(nn.Module):
             self.val_losses.append(avg_val_loss)
             self.train_accuracies.append(train_accuracy)
             self.val_accuracies.append(val_accuracy)
+            # Update final_train_accuracy with the latest training accuracy
+            final_train_accuracy = correct_train_preds / max(total_train_preds, 1)
 
         self.logger.info('Training process completed. Starting testing on the test set.')
 
         # Testing on the test set after all epochs
-        avg_test_loss, test_accuracy = self.evaluate(test_loader, 'testing')
-        self.logger.info(f"Test Loss: {avg_test_loss}, Test Accuracy: {test_accuracy}")
+        avg_test_loss, final_test_accuracy = self.evaluate(test_loader, 'testing')
+        self.logger.info(f"Test Loss: {avg_test_loss}, Test Accuracy: {final_test_accuracy}")
+        return final_train_accuracy, final_test_accuracy
 
     def evaluate(self, data_loader, context='validation'):
         assert context in ['validation', 'testing'], "Context must be either 'validation' or 'testing'"
@@ -371,4 +377,24 @@ class ArabicTextClassifier(nn.Module):
 
         plt.tight_layout()
         plt.show()
+
+
+    def plot_final_accuracies(self,final_train_accuracy, final_test_accuracy):
+
+
+        # Ensure accuracies are provided
+        if final_train_accuracy is None or final_test_accuracy is None:
+            print("Final training or testing accuracy not provided.")
+            return
+
+        # Plotting
+        plt.figure(figsize=(8, 6))
+        plt.bar(['Final Training Accuracy', 'Final Testing Accuracy'], [final_train_accuracy, final_test_accuracy],
+                color=['blue', 'green'])
+        plt.xlabel('Dataset')
+        plt.ylabel('Accuracy')
+        plt.ylim(0, 1)  # Assuming accuracy is a percentage between 0 and 1
+        plt.title('Final Model Accuracies')
+        plt.show()
+
 

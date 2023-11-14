@@ -72,10 +72,13 @@ def main():
 
     # Train and evaluate
     try:
-        classifier.train(train_loader, val_loader, test_loader)
+        final_train_accuracy, final_test_accuracy = classifier.train(train_loader, val_loader, test_loader)
 
         # Plot training/validation metrics
         classifier.plot_metrics()
+
+        # Plot final accuracies
+        classifier.plot_final_accuracies(final_train_accuracy, final_test_accuracy)
 
         # Save final model
         save_path = os.path.join(model_path, 'Saved_AI_Arabic_Detector_Model')
