@@ -366,7 +366,7 @@ class ArabicTextClassifier(nn.Module):
         plt.show()
 
 
-    def plot_final_accuracies(final_train_accuracy, final_test_accuracy):
+    def plot_final_accuracies(self,final_train_accuracy, final_test_accuracy):
         # Ensure accuracies are provided
         if final_train_accuracy is None or final_test_accuracy is None:
             print("Final training or testing accuracy not provided.")
