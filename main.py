@@ -81,7 +81,8 @@ def main():
         classifier.plot_final_accuracies(final_train_accuracy, final_test_accuracy)
 
         # Save final model
-        save_path = os.path.join(model_path, 'Saved_AI_Arabic_Detector_Model')
+        save_path = os.path.join(model_path, r'Saved_AI_Arabic_Detector_Model')
+        print(f"Attempting to save model to: {save_path}")
         classifier.save(save_path)
 
         # Check if the best model was saved during training

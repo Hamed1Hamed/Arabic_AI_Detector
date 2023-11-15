@@ -379,22 +379,28 @@ class ArabicTextClassifier(nn.Module):
         plt.show()
 
 
-    def plot_final_accuracies(self,final_train_accuracy, final_test_accuracy):
-
-
+    def plot_final_accuracies(final_train_accuracy, final_test_accuracy):
         # Ensure accuracies are provided
         if final_train_accuracy is None or final_test_accuracy is None:
             print("Final training or testing accuracy not provided.")
             return
 
+        # Assuming you have a list of accuracies per epoch for training and testing
+        # Replace the following lists with your actual data
+        epochs = list(range(len(final_train_accuracy)))  # Replace with your range of epochs
+        train_accuracies = final_train_accuracy  # Replace with your training accuracy data
+        test_accuracies = final_test_accuracy  # Replace with your testing accuracy data
+
         # Plotting
         plt.figure(figsize=(8, 6))
-        plt.bar(['Final Training Accuracy', 'Final Testing Accuracy'], [final_train_accuracy, final_test_accuracy],
-                color=['blue', 'green'])
-        plt.xlabel('Dataset')
-        plt.ylabel('Accuracy')
-        plt.ylim(0, 1)  # Assuming accuracy is a percentage between 0 and 1
-        plt.title('Final Model Accuracies')
+        plt.plot(epochs, train_accuracies, label='train', color='blue')
+        plt.plot(epochs, test_accuracies, label='test', color='green')
+
+        plt.xlabel('epoch')
+        plt.ylabel('accuracy')
+        plt.title('model accuracy')
+        plt.legend()
         plt.show()
+
 
 
