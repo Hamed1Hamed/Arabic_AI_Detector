@@ -29,26 +29,17 @@ class CustomClassifierHead(nn.Module):
         super(CustomClassifierHead, self).__init__()
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(0.1)
-
-        # Renaming binary_feature_layer to ai_indicator_layer
         self.ai_indicator_layer = nn.Linear(1, hidden_size)
-        self.char_count_feature_layer = nn.Linear(1, hidden_size)
+        self.out_proj = nn.Linear(hidden_size * 2, num_labels)  # Adjusted size
 
-        # Output projection layer
-        self.out_proj = nn.Linear(hidden_size * 3, num_labels)
-
-    def forward(self, transformer_output, ai_indicator, char_count_feature):
-        # Process the transformer output
+    def forward(self, transformer_output, ai_indicator):
         x = self.dense(transformer_output)
         x = self.dropout(x)
-
-        # Process ai_indicator and char_count_feature
         ai_indicator_processed = self.ai_indicator_layer(ai_indicator)
-        char_count_feature_processed = self.char_count_feature_layer(char_count_feature)
-
-        concat = torch.cat((x, ai_indicator_processed, char_count_feature_processed), dim=-1)
+        concat = torch.cat((x, ai_indicator_processed), dim=-1)  # Exclude char_count_feature
         logits = self.out_proj(concat)
         return logits
+
 
 
 
@@ -56,17 +47,15 @@ class CustomClassifierHead(nn.Module):
 class CustomModel(nn.Module):
     def __init__(self, model_name, num_labels):
         super(CustomModel, self).__init__()
-        # Use XLMRobertaModel to get hidden states
         self.transformer = XLMRobertaModel.from_pretrained(model_name)
         self.custom_head = CustomClassifierHead(self.transformer.config.hidden_size, num_labels)
 
-    def forward(self, input_ids, attention_mask, ai_indicator, char_count_feature):
+    def forward(self, input_ids, attention_mask, ai_indicator):
         transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
-        # Get the last hidden state
         hidden_state = transformer_outputs.last_hidden_state[:, 0, :]
-
-        final_logits = self.custom_head(hidden_state, ai_indicator, char_count_feature)
+        final_logits = self.custom_head(hidden_state, ai_indicator)
         return final_logits
+
 
 
 class ArabicTextClassifier(nn.Module):
@@ -84,8 +73,8 @@ class ArabicTextClassifier(nn.Module):
         self.val_accuracies = []
         self.loss_fn = torch.nn.CrossEntropyLoss()
 
-    def forward(self, input_ids, attention_mask, ai_indicator, char_count_feature):
-        return self.model(input_ids, attention_mask, ai_indicator, char_count_feature)
+    def forward(self, input_ids, attention_mask, ai_indicator):
+        return self.model(input_ids, attention_mask, ai_indicator)
 
     # ----------------------------------------------------------------Training and Evaluation Functions-------------------------------------------------------------
     def load_best_model(self):
@@ -129,7 +118,6 @@ class ArabicTextClassifier(nn.Module):
                     input_ids=inputs['input_ids'],
                     attention_mask=inputs['attention_mask'],
                     ai_indicator=ai_indicator,
-                    char_count_feature=inputs['char_count']  # Pass char_count_feature here
                 )
 
                 # loss = torch.nn.functional.cross_entropy(logits, labels)  # Calculate loss
@@ -215,7 +203,6 @@ class ArabicTextClassifier(nn.Module):
                     input_ids=inputs['input_ids'],
                     attention_mask=inputs['attention_mask'],
                     ai_indicator=ai_indicator,
-                    char_count_feature=inputs['char_count']
                 )
 
                 loss = self.loss_fn(logits, labels)
