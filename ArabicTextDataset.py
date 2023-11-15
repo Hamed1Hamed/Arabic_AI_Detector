@@ -18,14 +18,10 @@ data_type_to_filename = {
 }
 
 
-def load_indicator_phrases(file_path):
-    with open(file_path, 'r', encoding='utf-8') as file:
-        return [line.strip() for line in file]
 
 
 class ArabicTextDataset(Dataset):
-    def __init__(self, tokenizer, data_type, indicator_phrases_path):
-        self.indicator_phrases = load_indicator_phrases(indicator_phrases_path)
+    def __init__(self, tokenizer, data_type):
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         logging.info('Initializing ArabicTextDataset')
 
@@ -76,11 +72,8 @@ class ArabicTextDataset(Dataset):
             max_length=512,
             return_tensors="pt"
         )
-        ai_indicator = torch.tensor([self._contains_indicator_phrases(text)], dtype=torch.float)
-        #char_count_feature = torch.tensor([char_count], dtype=torch.float)  # Create Char_Count feature tensor
 
-        # Include Char_Count feature in the input dictionary
+
         input_dict = {key: val.squeeze(0) for key, val in encoding.items()}
-        #input_dict['char_count'] = char_count_feature
 
-        return input_dict, ai_indicator, torch.tensor(label, dtype=torch.long)
+        return input_dict, torch.tensor(label, dtype=torch.long)

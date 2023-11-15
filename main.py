@@ -7,7 +7,7 @@ from transformers import AutoTokenizer
 import logging
 """
  the best model will be saved in the "model_checkpoints" folder with the filename "best_model.pt".
- after training and evaluation, your model will be saved in a folder named "final_model" with the filename "Saved_AI_Arabic_Detector_Model"
+ after training and evaluation, the model will be saved in a folder named "final_model" with the filename "Saved_AI_Arabic_Detector_Model"
  
 """
 def main():
@@ -25,7 +25,6 @@ def main():
     model_name = config['model_name']
     batch_size = config['batch_size']
     model_path = config['final_model_path']
-    indicator_phrases_path = config['indicator_phrases_path']  # Load the indicator phrases path
     model_checkpoints= config['checkpoint_path'] # Load the model checkpoints path
 
     final_model_path = config['final_model_path']  # Assuming 'config' is already loaded from 'config.json'
@@ -35,9 +34,9 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     # Initialize datasets
-    train_dataset = ArabicTextDataset(tokenizer, 'train', indicator_phrases_path)
-    val_dataset = ArabicTextDataset(tokenizer, 'val', indicator_phrases_path)
-    test_dataset = ArabicTextDataset(tokenizer, 'test', indicator_phrases_path)
+    train_dataset = ArabicTextDataset(tokenizer, 'train')
+    val_dataset = ArabicTextDataset(tokenizer, 'val')
+    test_dataset = ArabicTextDataset(tokenizer, 'test')
 
     # Initialize data loaders
     data_loader = ArabicTextDataLoader(

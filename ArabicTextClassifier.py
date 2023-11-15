@@ -29,16 +29,14 @@ class CustomClassifierHead(nn.Module):
         super(CustomClassifierHead, self).__init__()
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(0.1)
-        self.ai_indicator_layer = nn.Linear(1, hidden_size)
-        self.out_proj = nn.Linear(hidden_size * 2, num_labels)  # Adjusted size
+        self.out_proj = nn.Linear(hidden_size, num_labels)  # Adjusted size back to single hidden_size
 
-    def forward(self, transformer_output, ai_indicator):
+    def forward(self, transformer_output):
         x = self.dense(transformer_output)
         x = self.dropout(x)
-        ai_indicator_processed = self.ai_indicator_layer(ai_indicator)
-        concat = torch.cat((x, ai_indicator_processed), dim=-1)  # Exclude char_count_feature
-        logits = self.out_proj(concat)
+        logits = self.out_proj(x)
         return logits
+
 
 
 
@@ -50,11 +48,12 @@ class CustomModel(nn.Module):
         self.transformer = XLMRobertaModel.from_pretrained(model_name)
         self.custom_head = CustomClassifierHead(self.transformer.config.hidden_size, num_labels)
 
-    def forward(self, input_ids, attention_mask, ai_indicator):
+    def forward(self, input_ids, attention_mask):
         transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
         hidden_state = transformer_outputs.last_hidden_state[:, 0, :]
-        final_logits = self.custom_head(hidden_state, ai_indicator)
+        final_logits = self.custom_head(hidden_state)
         return final_logits
+
 
 
 
@@ -108,16 +107,14 @@ class ArabicTextClassifier(nn.Module):
             progress_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{self.epochs}", leave=True)
 
             for batch in progress_bar:
-                inputs, ai_indicator, labels = batch  # Unpack the ai_indicator tensor
+                inputs, labels = batch
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
-                ai_indicator = ai_indicator.to(self.device)  # Move ai_indicator to the correct device
                 labels = labels.to(self.device)
 
                 self.optimizer.zero_grad()
                 logits = self.model(
                     input_ids=inputs['input_ids'],
                     attention_mask=inputs['attention_mask'],
-                    ai_indicator=ai_indicator,
                 )
 
                 # loss = torch.nn.functional.cross_entropy(logits, labels)  # Calculate loss
@@ -183,7 +180,6 @@ class ArabicTextClassifier(nn.Module):
         y_pred = []
         correct_preds = 0
         total_preds = 0
-        loss_fn = torch.nn.CrossEntropyLoss()
 
         # Storage for evaluation metrics if they don't already exist
         if not hasattr(self, f'evaluation_accuracies_{context}'):
@@ -193,16 +189,14 @@ class ArabicTextClassifier(nn.Module):
 
         with torch.no_grad():
             for batch in progress_bar:
-                inputs, ai_indicator, labels = batch
+                inputs, labels = batch
 
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
-                ai_indicator = ai_indicator.to(self.device)
                 labels = labels.to(self.device)
 
                 logits = self.model(
                     input_ids=inputs['input_ids'],
                     attention_mask=inputs['attention_mask'],
-                    ai_indicator=ai_indicator,
                 )
 
                 loss = self.loss_fn(logits, labels)
