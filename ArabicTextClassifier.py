@@ -45,7 +45,9 @@ class CustomClassifierHead(nn.Module):
 class CustomModel(nn.Module):
     def __init__(self, model_name, num_labels):
         super(CustomModel, self).__init__()
-        self.transformer = XLMRobertaModel.from_pretrained(model_name)
+        #self.transformer = XLMRobertaModel.from_pretrained(model_name)
+        self.transformer = AutoModel.from_pretrained(model_name)
+
         self.custom_head = CustomClassifierHead(self.transformer.config.hidden_size, num_labels)
 
     def forward(self, input_ids, attention_mask):
@@ -228,6 +230,10 @@ class ArabicTextClassifier(nn.Module):
 
     # save()	Saves the model and tokenizer at a specified file path.
     # save_best_model()	Saves the best model and tokenizer based on a specific metric.
+    """
+    save_best_model is used during the training process, typically after each epoch, to overwrite the same file with the best model's state so far. This is saved in your model_checkpoints directory.
+    save is used to save the final model state after training has finished, regardless of whether it's the best according to validation metrics. This is saved in your final_model directory.
+    """
     def save_best_model(self):
         # Save the best model without including the epoch in the filename
         model_save_path = os.path.join(self.checkpoint_path, "best_model.pt")
@@ -242,11 +248,10 @@ class ArabicTextClassifier(nn.Module):
             if not os.path.exists(directory):
                 os.makedirs(directory, exist_ok=True)
 
-            # Save the model state dictionary
-            model_save_path = os.path.join(file_path, "model_state_dict.pt")
-            torch.save(self.model.state_dict(), model_save_path)
+            # Save the model state dictionary directly to file_path
+            torch.save(self.model.state_dict(), file_path)
 
-            self.logger.info(f"Model state dictionary saved to {model_save_path}")
+            self.logger.info(f"Model state dictionary saved to {file_path}")
         except Exception as e:
             self.logger.error(f"Error saving model: {e}")
             raise
@@ -274,11 +279,9 @@ class ArabicTextClassifier(nn.Module):
             accuracy_label = 'Evaluation Accuracy'
 
         else:
-            # Ensure there's data to plot for training; if not, log a message and exit the function
             if not self.train_losses or not self.train_accuracies or not self.val_losses or not self.val_accuracies:
                 self.logger.info('No training/validation data available to plot.')
                 return
-            # Check for the presence of training loss data before setting epochs_range
             if not self.train_losses:
                 self.logger.warning('No training loss data available to plot.')
                 return  # Exiting because there's no meaningful epochs_range to work with.
@@ -359,29 +362,24 @@ class ArabicTextClassifier(nn.Module):
         plt.tight_layout()
         plt.show()
 
-
-    def plot_final_accuracies(self,final_train_accuracy, final_test_accuracy):
+    def plot_final_accuracies(self, final_train_accuracy, final_test_accuracy):
         # Ensure accuracies are provided
         if final_train_accuracy is None or final_test_accuracy is None:
             print("Final training or testing accuracy not provided.")
             return
 
-        # Assuming you have a list of accuracies per epoch for training and testing
-        # Replace the following lists with your actual data
-        epochs = list(range(len(final_train_accuracy)))  # Replace with your range of epochs
-        train_accuracies = final_train_accuracy  # Replace with your training accuracy data
-        test_accuracies = final_test_accuracy  # Replace with your testing accuracy data
-
         # Plotting
-        plt.figure(figsize=(8, 6))
-        plt.plot(epochs, train_accuracies, label='train', color='blue')
-        plt.plot(epochs, test_accuracies, label='test', color='green')
+        plt.figure(figsize=(6, 4))
+        plt.plot(['Train', 'Test'], [final_train_accuracy, final_test_accuracy], marker='o')
+        for i, acc in enumerate([final_train_accuracy, final_test_accuracy]):
+            plt.text(i, acc, f"{acc:.2f}", ha='center', va='bottom')
 
-        plt.xlabel('epoch')
-        plt.ylabel('accuracy')
-        plt.title('model accuracy')
-        plt.legend()
+        plt.ylim(0, 1)  # Assuming accuracy is between 0 and 1
+        plt.ylabel('Accuracy')
+        plt.title('Final Training & Testing Accuracy')
+        plt.legend(['Accuracy'])
         plt.show()
+
 
 
 

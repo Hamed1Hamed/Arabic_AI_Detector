@@ -5,32 +5,43 @@ from ArabicTextDataLoader import ArabicTextDataLoader
 from ArabicTextClassifier import ArabicTextClassifier
 from transformers import AutoTokenizer
 import logging
-"""
- the best model will be saved in the "model_checkpoints" folder with the filename "best_model.pt".
- after training and evaluation, the model will be saved in a folder named "final_model" with the filename "Saved_AI_Arabic_Detector_Model"
- 
-"""
+
+
+
+
 def main():
-    print("Current Working Directory:", os.getcwd())
-    print("Directory exists:", os.path.exists('./model_checkpoints/'))
-    # Check if the 'final_model' directory exists
 
     # Set up logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger()
 
     # Load configuration
     with open('config.json', 'r') as config_file:
         config = json.load(config_file)
 
-    model_name = config['model_name']
-    batch_size = config['batch_size']
-    model_path = config['final_model_path']
-    model_checkpoints= config['checkpoint_path'] # Load the model checkpoints path
+    logger.info("Current Working Directory: {}".format(os.getcwd()))
+    logger.info("Directory exists: {}".format(os.path.exists('./model_checkpoints/')))
 
-    final_model_path = config['final_model_path']  # Assuming 'config' is already loaded from 'config.json'
-    print("Directory exists ('final_model'):", os.path.exists(f'./{final_model_path}/'))
+    # Set up full paths for saving models and checkpoints
+    project_root_dir = os.getcwd()  # Assumes the project root directory is the current working directory
+    model_save_path = os.path.join(project_root_dir, config['model_save_path'])
+    final_model_path = os.path.join(project_root_dir, config['final_model_path'])
+    model_checkpoints = os.path.join(project_root_dir, config['checkpoint_path'])
+    batch_size = config['batch_size']
+
+    # Ensure that directories exist
+    os.makedirs(model_save_path, exist_ok=True)
+    os.makedirs(final_model_path, exist_ok=True)
+    os.makedirs(model_checkpoints, exist_ok=True)
+
+    # Check if the directories exist (optional, for verification)
+    logger.info(f"Directory exists: {os.path.exists(model_save_path)}")
+    logger.info(f"Directory exists: {os.path.exists(final_model_path)}")
+    logger.info(f"Directory exists: {os.path.exists(model_checkpoints)}")
 
     # Load tokenizer
+
+    model_name = config['model_name']
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     # Initialize datasets
@@ -61,10 +72,10 @@ def main():
     # Load the best model if it exists, else start training from scratch
     best_model_path = os.path.join(model_checkpoints, "best_model.pt")
     if os.path.isfile(best_model_path):
-        print("Loading the best model...")
+        logger.info("Loading the best model...")
         classifier.load_best_model()
     else:
-        print("No best model found. Starting training from scratch.")
+        logger.info("No best model found. Starting training from scratch.")
 
     # Move classifier to the appropriate device
     classifier.to(classifier.device)
@@ -80,18 +91,19 @@ def main():
         classifier.plot_final_accuracies(final_train_accuracy, final_test_accuracy)
 
         # Save final model
-        save_path = os.path.join(model_path, r'Saved_AI_Arabic_Detector_Model')
-        print(f"Attempting to save model to: {save_path}")
-        classifier.save(save_path)
+        final_model_save_path = os.path.join(final_model_path, "Saved_AI_Arabic_Detector_Model.pt")
+        logger.info(f"Attempting to save the final model to: {final_model_save_path}")
+        classifier.save(final_model_save_path)
 
         # Check if the best model was saved during training
         if os.path.isfile(best_model_path):
-            print("The best model was saved successfully.")
+            logger.info("The best model was saved successfully.")
         else:
-            print("The best model was not saved.")
+            logger.info("The best model was not saved.")
 
     except Exception as e:
-        logging.error(f"An error occurred: {str(e)}")
+        logger.error(f"An error occurred: {str(e)}")
+
 
 if __name__ == '__main__':
     main()
