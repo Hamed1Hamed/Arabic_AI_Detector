@@ -17,9 +17,6 @@ data_type_to_filename = {
     'test': 'Testing.csv'
 }
 
-
-
-
 class ArabicTextDataset(Dataset):
     def __init__(self, tokenizer, data_type):
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -54,10 +51,7 @@ class ArabicTextDataset(Dataset):
         for index, row in df.iterrows():
             text = row['text']
             label = int(row['label'])
-            self.samples.append((text, label)) 
-
-    def _contains_indicator_phrases(self, text):
-        return any(phrase in text for phrase in self.indicator_phrases)
+            self.samples.append((text, label))
 
     def __len__(self):
         return len(self.samples)
