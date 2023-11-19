@@ -54,8 +54,7 @@ class ArabicTextDataset(Dataset):
         for index, row in df.iterrows():
             text = row['text']
             label = int(row['label'])
-            #char_count = int(row['Char_Count'])  # Load Char_Count feature
-            self.samples.append((text, label))  # Include Char_Count in samples
+            self.samples.append((text, label)) 
 
     def _contains_indicator_phrases(self, text):
         return any(phrase in text for phrase in self.indicator_phrases)
