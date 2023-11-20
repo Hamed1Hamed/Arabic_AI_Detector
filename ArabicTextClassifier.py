@@ -74,8 +74,8 @@ class ArabicTextClassifier(nn.Module):
         self.val_accuracies = []
         self.loss_fn = torch.nn.CrossEntropyLoss()
 
-    def forward(self, input_ids, attention_mask, ai_indicator):
-        return self.model(input_ids, attention_mask, ai_indicator)
+    def forward(self, input_ids, attention_mask):
+        return self.model(input_ids, attention_mask)
 
     # ----------------------------------------------------------------Training and Evaluation Functions-------------------------------------------------------------
     def load_best_model(self):
