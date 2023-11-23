@@ -1,6 +1,6 @@
 {
     "learning_rate": 0.0001,
-    "model_name": "xlm-roberta-base",
+    "model_name": "aubmindlab/araelectra-base-discriminator",
     "epochs": 10,
     "batch_size": 64,
     "root_folder": "Dataset",
