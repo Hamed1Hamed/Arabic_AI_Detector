@@ -214,12 +214,14 @@ class ArabicTextClassifier(nn.Module):
         avg_loss = total_loss / len(data_loader)
         accuracy = correct_preds / total_preds
 
-        # Logging metrics
-        self.logger.info(f"{context.capitalize()} Accuracy: {accuracy}")
-        self.logger.info(f"{context.capitalize()} Precision: {precision_score(y_true, y_pred, zero_division=0)}")
-        self.logger.info(f"{context.capitalize()} Recall: {recall_score(y_true, y_pred, zero_division=0)}")
-        self.logger.info(f"{context.capitalize()} F1 Score: {f1_score(y_true, y_pred, zero_division=0)}")
-        self.logger.info(f"{context.capitalize()} AUC-ROC: {roc_auc_score(y_true, y_pred)}")
+        # Logging metrics without specifying precision; I remove .4f
+        self.logger.info(f"{context.capitalize()} Evaluation Metrics:")
+        self.logger.info(f"  - Average Loss: {avg_loss}")
+        self.logger.info(f"  - Accuracy: {accuracy}")
+        self.logger.info(f"  - Precision: {precision_score(y_true, y_pred, zero_division=0)}")
+        self.logger.info(f"  - Recall: {recall_score(y_true, y_pred, zero_division=0)}")
+        self.logger.info(f"  - F1 Score: {f1_score(y_true, y_pred, zero_division=0)}")
+        self.logger.info(f"  - AUC-ROC: {roc_auc_score(y_true, y_pred)}")
 
         # Append to the evaluation metrics lists
         getattr(self, f'evaluation_accuracies_{context}').append(accuracy)
