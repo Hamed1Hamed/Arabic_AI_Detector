@@ -5,7 +5,9 @@ from ArabicTextDataLoader import ArabicTextDataLoader
 from ArabicTextClassifier import ArabicTextClassifier
 from transformers import AutoTokenizer
 import logging
-
+import random
+import numpy as np
+import torch
 
 
 
@@ -18,7 +20,15 @@ def main():
     # Load configuration
     with open('config.json', 'r') as config_file:
         config = json.load(config_file)
+    # Set seed for reproducibility
+    seed = config['seed']
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
+    # If you are using CUDA (PyTorch)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
     logger.info("Current Working Directory: {}".format(os.getcwd()))
     logger.info("Directory exists: {}".format(os.path.exists('./model_checkpoints/')))
 
@@ -55,6 +65,7 @@ def main():
         val_dataset=val_dataset,
         test_dataset=test_dataset,
         batch_size=batch_size,
+        seed=config['seed'],
         num_workers=4,
         pin_memory=True
     )
