@@ -3,6 +3,7 @@
     "model_name": "aubmindlab/araelectra-base-discriminator",
     "epochs": 20,
     "batch_size": 64,
+    "test_batch_size": 8,
     "root_folder": "Dataset",
     "model_save_path": "saved_model",
     "final_model_path": "final_model",
