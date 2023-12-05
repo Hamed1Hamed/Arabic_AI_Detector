@@ -1,4 +1,4 @@
-from transformers import XLMRobertaForSequenceClassification
+from torch.optim.lr_scheduler import LambdaLR
 from torch.optim import AdamW
 
 from transformers import XLMRobertaTokenizer
@@ -90,6 +90,20 @@ class ArabicTextClassifier(nn.Module):
         else:
             self.logger.info("No best model checkpoint found.")
 
+    def _create_scheduler(self):
+        # Custom scheduler with warmup
+        main_lr = self.optimizer.param_groups[0]['lr']
+        warmup_lr_lambda = lambda epoch: self.initial_learning_rate + (main_lr - self.initial_learning_rate) * (
+                    epoch / self.warmup_epochs)
+        cosine_annealing_lambda = lambda epoch: 0.5 * (1 + np.cos(np.pi * epoch / self.epochs))
+
+        def combined_scheduler(epoch):
+            if epoch < self.warmup_epochs:
+                return warmup_lr_lambda(epoch)
+            return cosine_annealing_lambda(epoch - self.warmup_epochs)
+
+        return LambdaLR(self.optimizer, lr_lambda=combined_scheduler)
+
     def train(self, train_loader, val_loader, test_loader, start_epoch=0):
         main_lr = self.optimizer.param_groups[0]['lr']
         best_val_loss = float('inf')
@@ -103,8 +117,10 @@ class ArabicTextClassifier(nn.Module):
 
         self.model.to(self.device) # Move model to the appropriate device
 
-        # Initialize the scheduler
-        scheduler = CosineAnnealingLR(self.optimizer, T_max=len(train_loader) * self.epochs, eta_min=0)
+        # # Initialize the scheduler
+        # scheduler = CosineAnnealingLR(self.optimizer, T_max=len(train_loader) * self.epochs, eta_min=0)
+        # Initialize the scheduler with warmup
+        scheduler = self._create_scheduler()
         self.logger.info('Training process started.')
 
         for epoch in range(start_epoch, self.epochs):
