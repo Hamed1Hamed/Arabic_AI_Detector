@@ -71,13 +71,16 @@ def main():
     )
     train_loader, val_loader, test_loader = data_loader.get_data_loaders()
 
-    # Initialize the classifier
+    # Initialize the classifier with the new parameters
     classifier = ArabicTextClassifier(
-        model_name=model_name,
+        model_name=config['model_name'],
         num_labels=2,
         learning_rate=config['learning_rate'],
         epochs=config['epochs'],
-        checkpoint_path=model_checkpoints
+        checkpoint_path=model_checkpoints,
+        patience=config['patience'],
+        initial_learning_rate=config['initial_learning_rate'],
+        warmup_epochs=config['warmup_epochs']
     )
 
     # Load the best model if it exists, else start training from scratch

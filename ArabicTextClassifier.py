@@ -60,7 +60,7 @@ class CustomModel(nn.Module):
 
 
 class ArabicTextClassifier(nn.Module):
-    def __init__(self, model_name, num_labels, learning_rate, epochs, checkpoint_path):
+    def __init__(self, model_name, num_labels, learning_rate, epochs, checkpoint_path, patience,initial_learning_rate, warmup_epochs):
         super(ArabicTextClassifier, self).__init__()
         self.model = CustomModel(model_name, num_labels)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -73,6 +73,10 @@ class ArabicTextClassifier(nn.Module):
         self.train_accuracies = []
         self.val_accuracies = []
         self.loss_fn = torch.nn.CrossEntropyLoss()
+        self.patience = patience
+        self.early_stopping_triggered = False
+        self.initial_learning_rate = initial_learning_rate
+        self.warmup_epochs = warmup_epochs
 
     def forward(self, input_ids, attention_mask):
         return self.model(input_ids, attention_mask)
@@ -87,6 +91,7 @@ class ArabicTextClassifier(nn.Module):
             self.logger.info("No best model checkpoint found.")
 
     def train(self, train_loader, val_loader, test_loader, start_epoch=0):
+        main_lr = self.optimizer.param_groups[0]['lr']
         best_val_loss = float('inf')
         epochs_without_improvement = 0  # Counter for early stopping
         final_train_accuracy = 0  # Initialize variable to store final training accuracy
@@ -95,12 +100,25 @@ class ArabicTextClassifier(nn.Module):
                 test_loader, DataLoader):
             raise TypeError(
                 "train_loader, val_loader, and test_loader must be DataLoader instances.")
-        self.model.to(self.device)  # Make sure this is done before training begins
+
+        self.model.to(self.device) # Move model to the appropriate device
+
         # Initialize the scheduler
         scheduler = CosineAnnealingLR(self.optimizer, T_max=len(train_loader) * self.epochs, eta_min=0)
         self.logger.info('Training process started.')
 
         for epoch in range(start_epoch, self.epochs):
+            # Warm-up phase logic
+            if epoch < self.warmup_epochs:
+                lr = self.initial_learning_rate + (main_lr - self.initial_learning_rate) * (epoch / self.warmup_epochs)
+                for param_group in self.optimizer.param_groups:
+                    param_group['lr'] = lr
+            else:
+                lr = main_lr
+                for param_group in self.optimizer.param_groups:
+                    param_group['lr'] = lr
+
+            self.logger.info(f'Epoch {epoch + 1}/{self.epochs}, Current LR: {lr}')
             self.model.train()  # Begin training
             total_train_loss = 0
             correct_train_preds = 0
@@ -114,10 +132,7 @@ class ArabicTextClassifier(nn.Module):
                 labels = labels.to(self.device)
 
                 self.optimizer.zero_grad()
-                logits = self.model(
-                    input_ids=inputs['input_ids'],
-                    attention_mask=inputs['attention_mask'],
-                )
+                logits = self.model(input_ids=inputs['input_ids'],attention_mask=inputs['attention_mask'])
 
                 # loss = torch.nn.functional.cross_entropy(logits, labels)  # Calculate loss
                 loss = self.loss_fn(logits, labels)
@@ -142,20 +157,22 @@ class ArabicTextClassifier(nn.Module):
             avg_train_loss = total_train_loss / len(train_loader)
             train_accuracy = correct_train_preds / max(total_train_preds, 1)
             self.logger.info(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Train Acc: {train_accuracy}")
-            # Update final_train_accuracy with the latest training accuracy
-            final_train_accuracy = correct_train_preds / max(total_train_preds, 1)
 
             # Validation step after each epoch
             avg_val_loss, val_accuracy = self.evaluate(val_loader, 'validation')
-
-            # Scheduler step with the validation loss
-
 
             # Checkpoint if this is the best model
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 epochs_without_improvement = 0
-                self.save_best_model()  # Save only the best model
+                self.save_best_model()
+            else:
+                epochs_without_improvement += 1
+
+            # Early stopping check
+            if epochs_without_improvement >= self.patience:
+                self.logger.info(f"Early stopping triggered after {epoch + 1} epochs.")
+                break
 
             # Record metrics for each epoch
             self.train_losses.append(avg_train_loss)

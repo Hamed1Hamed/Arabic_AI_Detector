@@ -1,4 +1,5 @@
 pip install -r requirements.txt
+    "model_name": "aubmindlab/araelectra-base-discriminator",
 
 potential needed libraries:
 transformers
