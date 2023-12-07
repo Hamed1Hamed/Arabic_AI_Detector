@@ -125,16 +125,7 @@ class ArabicTextClassifier(nn.Module):
 
         for epoch in range(start_epoch, self.epochs):
             # Warm-up phase logic
-            if epoch < self.warmup_epochs:
-                lr = self.initial_learning_rate + (main_lr - self.initial_learning_rate) * (epoch / self.warmup_epochs)
-                for param_group in self.optimizer.param_groups:
-                    param_group['lr'] = lr
-            else:
-                lr = main_lr
-                for param_group in self.optimizer.param_groups:
-                    param_group['lr'] = lr
 
-            self.logger.info(f'Epoch {epoch + 1}/{self.epochs}, Current LR: {lr}')
             self.model.train()  # Begin training
             total_train_loss = 0
             correct_train_preds = 0
@@ -160,6 +151,9 @@ class ArabicTextClassifier(nn.Module):
                 self.optimizer.step()
                 # Update the scheduler after each batch
                 scheduler.step()
+                # Retrieve and log current learning rate
+                current_lr = self.optimizer.param_groups[0]['lr']
+                self.logger.info(f'Epoch {epoch + 1}/{self.epochs}, Current LR: {current_lr}')
 
                 predictions = torch.argmax(logits, dim=-1)
                 correct_train_preds += torch.sum(predictions == labels).item()
