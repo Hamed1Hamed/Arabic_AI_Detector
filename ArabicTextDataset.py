@@ -4,6 +4,7 @@ from torch.utils.data import Dataset
 import pandas as pd
 import logging
 import json
+from camel_tools.utils.dediac import dediac_ar
 
 # Load configuration
 with open('config.json') as config_file:
@@ -16,6 +17,9 @@ data_type_to_filename = {
     'val': 'Validation.csv',
     'test': 'Testing.csv'
 }
+
+
+
 
 class ArabicTextDataset(Dataset):
     def __init__(self, tokenizer, data_type):
@@ -38,7 +42,7 @@ class ArabicTextDataset(Dataset):
             raise FileNotFoundError(f"{file_path} does not exist or is not accessible.")
 
         self.samples = []
-        self._load_csv(file_path)
+        self._load_csv(file_path, data_type)
 
         if len(self.samples) == 0:
             logging.error("No valid data samples found.")
@@ -46,12 +50,18 @@ class ArabicTextDataset(Dataset):
 
         logging.info(f"Loaded {len(self.samples)} samples.")
 
-    def _load_csv(self, file_path):
+    def _load_csv(self, file_path, data_type):
         df = pd.read_csv(file_path)
         for index, row in df.iterrows():
             text = row['text']
             label = int(row['label'])
+            # Apply preprocessing if this is the testing dataset
+            if data_type == 'test':
+                text = dediac_ar(text)  # Remove diacritics for testing set
+
             self.samples.append((text, label))
+
+
 
     def __len__(self):
         return len(self.samples)
