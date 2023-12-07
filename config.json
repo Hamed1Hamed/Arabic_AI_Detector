@@ -4,12 +4,12 @@
     "initial_learning_rate": 0.000005,
     "warmup_epochs": 5,
     "epochs": 10,
-    "batch_size": 32,
+    "batch_size": 64,
     "testing_batch_size": 8,
     "root_folder": "Dataset",
     "model_save_path": "saved_model",
     "final_model_path": "final_model",
     "checkpoint_path": "model_checkpoints",
     "seed": 1,
-    "patience": 7
+    "patience": 3
 }
