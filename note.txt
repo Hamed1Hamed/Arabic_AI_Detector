@@ -1,5 +1,6 @@
 pip install -r requirements.txt
     "model_name": "aubmindlab/araelectra-base-discriminator",
+    "model_name": "XML-roberta-base",
 
 potential needed libraries:
 transformers

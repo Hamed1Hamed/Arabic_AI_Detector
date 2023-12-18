@@ -130,6 +130,9 @@ class ArabicTextClassifier(nn.Module):
             total_train_loss = 0
             correct_train_preds = 0
             total_train_preds = 0
+            # Retrieve and log current learning rate
+            current_lr = self.optimizer.param_groups[0]['lr']
+            self.logger.info(f'Epoch {epoch + 1}/{self.epochs}, Current LR: {current_lr}')
 
             progress_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{self.epochs}", leave=True)
 
@@ -151,9 +154,6 @@ class ArabicTextClassifier(nn.Module):
                 self.optimizer.step()
                 # Update the scheduler after each batch
                 scheduler.step()
-                # Retrieve and log current learning rate
-                current_lr = self.optimizer.param_groups[0]['lr']
-                self.logger.info(f'Epoch {epoch + 1}/{self.epochs}, Current LR: {current_lr}')
 
                 predictions = torch.argmax(logits, dim=-1)
                 correct_train_preds += torch.sum(predictions == labels).item()
