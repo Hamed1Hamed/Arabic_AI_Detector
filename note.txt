@@ -1,14 +1,4 @@
 pip install -r requirements.txt
+You only need to modify the config.json file in order to change the hyperparameters of the model.
     "model_name": "aubmindlab/araelectra-base-discriminator",
     "model_name": "XML-roberta-base",
-
-potential needed libraries:
-transformers
-torch
-scikit-learn
-matplotlib
-pandas
-tqdm
-numpy
-requests
-black

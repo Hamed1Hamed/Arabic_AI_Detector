@@ -1,10 +1,10 @@
 {
     "model_name": "aubmindlab/araelectra-base-discriminator",
     "learning_rate": 3.2e-05,
-    "initial_learning_rate": 0.000005,
+    "initial_learning_rate": 5e-6,
     "warmup_epochs": 5,
     "epochs": 10,
-    "batch_size": 64,
+    "batch_size": 32,
     "testing_batch_size": 8,
     "root_folder": "Dataset",
     "model_save_path": "saved_model",
