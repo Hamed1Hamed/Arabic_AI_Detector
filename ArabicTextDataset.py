@@ -6,20 +6,15 @@ import logging
 import json
 from camel_tools.utils.dediac import dediac_ar
 
-# Load configuration
 with open('config.json') as config_file:
     config = json.load(config_file)
 dataset_folder = config['root_folder']
 
-# Define the mapping from data_type to CSV filenames
 data_type_to_filename = {
     'train': 'Training.csv',
     'val': 'Validation.csv',
     'test': 'Testing.csv'
 }
-
-
-
 
 class ArabicTextDataset(Dataset):
     def __init__(self, tokenizer, data_type):
@@ -50,12 +45,14 @@ class ArabicTextDataset(Dataset):
 
         logging.info(f"Loaded {len(self.samples)} samples.")
 
+# Apply dediacritization layer for evaluating the AIRABIC Dataset purpose. If you are using another dataset, you can remove this layer by the following
+    # remove data_type argument from the _load_csv function. Then remove the if statment below that contains the dediacritization layer.
     def _load_csv(self, file_path, data_type):
         df = pd.read_csv(file_path)
         for index, row in df.iterrows():
             text = row['text']
             label = int(row['label'])
-            # Apply preprocessing if this is the testing dataset
+            # Apply dediacritization layer for evaluating the AIRABIC Dataset purpose only. If you are using another dataset, you can remove this layer.
             if data_type == 'test':
                 text = dediac_ar(text)  # Remove diacritics for testing set
 
