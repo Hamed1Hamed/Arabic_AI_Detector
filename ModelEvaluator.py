@@ -9,7 +9,8 @@ from tqdm import tqdm
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, accuracy_score, confusion_matrix
 import matplotlib.pyplot as plt
 import numpy as np
-
+from sklearn.metrics import roc_curve, auc
+import json
 " This class is used to evaluate the model on the testing set."
 class ModelEvaluator:
     def __init__(self, model_path, model_name, num_labels, device):
@@ -34,11 +35,13 @@ class ModelEvaluator:
         except Exception as e:
             self.logger.error(f"Failed to load model. Error: {e}")
             raise
+
     def evaluate(self, data_loader):
         self.model.eval()
         total_loss = 0
         y_true = []
         y_pred = []
+        y_scores = []  # The probabilities for the positive class
 
         progress_bar = tqdm(data_loader, desc="Evaluating (testing set)", leave=True)
         with torch.no_grad():
@@ -51,28 +54,50 @@ class ModelEvaluator:
                 loss = self.loss_fn(logits, labels)
                 total_loss += loss.item()
 
-                predictions = torch.argmax(logits, dim=-1)
-                y_true.extend(labels.cpu().numpy())
+                # Use softmax for probabilities since we have two output scores
+                probabilities = torch.softmax(logits, dim=1)[:, 1]
+                y_scores.extend(probabilities.cpu().numpy())  # Extend y_scores with the probabilities
+
+                # Get the actual predictions
+                predictions = torch.argmax(logits, dim=1)
                 y_pred.extend(predictions.cpu().numpy())
 
-        avg_loss = total_loss / len(data_loader)
-        accuracy = accuracy_score(y_true, y_pred)
-        precision = precision_score(y_true, y_pred, zero_division=0)
-        recall = recall_score(y_true, y_pred, zero_division=0)
-        f1 = f1_score(y_true, y_pred, zero_division=0)
-        auc = roc_auc_score(y_true, y_pred)
+                y_true.extend(labels.cpu().numpy())
 
-        self.logger.info("Testing Evaluation Metrics:")
-        self.logger.info(f"  - Average Loss: {avg_loss}")
-        self.logger.info(f"  - Accuracy: {accuracy}")
-        self.logger.info(f"  - Precision: {precision}")
-        self.logger.info(f"  - Recall: {recall}")
-        self.logger.info(f"  - F1 Score: {f1}")
-        self.logger.info(f"  - AUC-ROC: {auc}")
+            avg_loss = total_loss / len(data_loader)
+            accuracy = accuracy_score(y_true, y_pred)
+            precision = precision_score(y_true, y_pred, zero_division=0)
+            recall = recall_score(y_true, y_pred, zero_division=0)
+            f1 = f1_score(y_true, y_pred, zero_division=0)
+            auc = roc_auc_score(y_true, y_scores)
 
-        self.plot_confusion_matrix(y_true, y_pred)
+            self.logger.info("Testing Evaluation Metrics:")
+            self.logger.info(f"  - Average Loss: {avg_loss}")
+            self.logger.info(f"  - Accuracy: {accuracy}")
+            self.logger.info(f"  - Precision: {precision}")
+            self.logger.info(f"  - Recall: {recall}")
+            self.logger.info(f"  - F1 Score: {f1}")
+            self.logger.info(f"  - AUC-ROC: {auc}")
 
-        return avg_loss
+            self.plot_confusion_matrix(y_true, y_pred)
+            # Plotting ROC Curve
+            auc_score = roc_auc_score(y_true, y_scores)
+            self.plot_roc_curve(y_true, y_scores, auc_score)
+
+            return avg_loss
+
+    def plot_roc_curve(self,y_true, y_scores, auc_score):
+        fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+        plt.figure(figsize=(8, 6))
+        plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {auc_score:.2f})')
+        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', label='random classifier')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver Operating Characteristic (ROC) Curve')
+        plt.legend(loc="lower right")
+        plt.grid(True)
+        plt.savefig('roc_curve.png')
+        plt.show()
 
     def plot_confusion_matrix(self, y_true, y_pred):
         classes = ['AI-generated', 'Human-written']
