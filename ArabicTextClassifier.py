@@ -1,16 +1,25 @@
 from torch.optim.lr_scheduler import LambdaLR
 from torch.optim import AdamW
-from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, roc_auc_score, accuracy_score
+
+from transformers import XLMRobertaTokenizer
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, roc_auc_score, accuracy_score, \
+    roc_curve
 import matplotlib.pyplot as plt
 import numpy as np
+import logging
 import itertools
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from tqdm import tqdm
+import torch
 from torch.utils.data import DataLoader
 import os
+from transformers import XLMRobertaModel
 import logging
+import json
 from transformers import AutoModel
 import torch
 import torch.nn as nn
+from sklearn.metrics import roc_auc_score
 
 
 logging.basicConfig(filename='classifier.log', level=logging.INFO, format='%(asctime)s - %(message)s',
@@ -22,17 +31,13 @@ class CustomClassifierHead(nn.Module):
         super(CustomClassifierHead, self).__init__()
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(0.1)
-        self.out_proj = nn.Linear(hidden_size, num_labels)  # Adjusted size back to single hidden_size
+        self.out_proj = nn.Linear(hidden_size, num_labels)
 
     def forward(self, transformer_output):
         x = self.dense(transformer_output)
         x = self.dropout(x)
         logits = self.out_proj(x)
         return logits
-
-
-
-
 
 
 class CustomModel(nn.Module):
@@ -118,7 +123,6 @@ class ArabicTextClassifier(nn.Module):
 
         for epoch in range(start_epoch, self.epochs):
             # Warm-up phase logic
-
             self.model.train()  # Begin training
             total_train_loss = 0
             correct_train_preds = 0
@@ -192,6 +196,7 @@ class ArabicTextClassifier(nn.Module):
         self.logger.info(f"Test Loss: {avg_test_loss}, Test Accuracy: {final_test_accuracy}")
         return final_train_accuracy, final_test_accuracy
 
+
     def evaluate(self, data_loader, context='validation'):
         assert context in ['validation', 'testing'], "Context must be either 'validation' or 'testing'"
 
@@ -200,6 +205,7 @@ class ArabicTextClassifier(nn.Module):
         total_loss = 0
         y_true = []
         y_pred = []
+        y_scores = []  # The probabilities for the positive class
         correct_preds = 0
         total_preds = 0
 
@@ -224,6 +230,10 @@ class ArabicTextClassifier(nn.Module):
                 loss = self.loss_fn(logits, labels)
                 total_loss += loss.item()
 
+                # Calculate probabilities from logits
+                probabilities = torch.softmax(logits, dim=1)[:, 1]
+                y_scores.extend(probabilities.cpu().numpy())
+
                 predictions = torch.argmax(logits, dim=-1)
                 y_true.extend(labels.cpu().numpy())
                 y_pred.extend(predictions.cpu().numpy())
@@ -234,24 +244,31 @@ class ArabicTextClassifier(nn.Module):
         avg_loss = total_loss / len(data_loader)
         accuracy = correct_preds / total_preds
 
-        # Logging metrics without specifying precision; I remove .4f
+        # Calculate the metrics
+        precision = precision_score(y_true, y_pred, zero_division=0)
+        recall = recall_score(y_true, y_pred, zero_division=0)
+        f1 = f1_score(y_true, y_pred, zero_division=0)
+        auc_roc = roc_auc_score(y_true, y_scores)  # Use the probabilities for AUC-ROC
+
+        # Logging metrics
         self.logger.info(f"{context.capitalize()} Evaluation Metrics:")
         self.logger.info(f"  - Average Loss: {avg_loss}")
         self.logger.info(f"  - Accuracy: {accuracy}")
-        self.logger.info(f"  - Precision: {precision_score(y_true, y_pred, zero_division=0)}")
-        self.logger.info(f"  - Recall: {recall_score(y_true, y_pred, zero_division=0)}")
-        self.logger.info(f"  - F1 Score: {f1_score(y_true, y_pred, zero_division=0)}")
-        self.logger.info(f"  - AUC-ROC: {roc_auc_score(y_true, y_pred)}")
+        self.logger.info(f"  - Precision: {precision}")
+        self.logger.info(f"  - Recall: {recall}")
+        self.logger.info(f"  - F1 Score: {f1}")
+        self.logger.info(f"  - AUC-ROC: {auc_roc}")
 
         # Append to the evaluation metrics lists
         getattr(self, f'evaluation_accuracies_{context}').append(accuracy)
 
         self.plot_confusion_matrix(y_true, y_pred, context)
+        # Plot ROC Curve
+        self.plot_roc_curve(y_true, y_scores, auc_roc)
 
         return avg_loss, accuracy
 
-    # save()	Saves the model and tokenizer at a specified file path.
-    # save_best_model()	Saves the best model and tokenizer based on a specific metric.
+    # -----------------------------------------------------------------Utility Functions-------------------------------------------------------------
     """
     save_best_model is used during the training process, typically after each epoch, to overwrite the same file with the best model's state so far. This is saved in your model_checkpoints directory.
     save is used to save the final model state after training has finished, regardless of whether it's the best according to validation metrics. This is saved in your final_model directory.
@@ -344,6 +361,20 @@ class ArabicTextClassifier(nn.Module):
 
         plt.tight_layout()
         plt.show()
+
+    def plot_roc_curve(self,y_true, y_scores, auc_score):
+        fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+        plt.figure(figsize=(8, 6))
+        plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {auc_score:.2f})')
+        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', label='random classifier')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver Operating Characteristic (ROC) Curve')
+        plt.legend(loc="lower right")
+        plt.grid(True)
+        plt.savefig('roc_curve.png')
+        plt.show()
+
 
     def plot_confusion_matrix(self, y_true, y_pred, context='validation'):
         assert context in ['validation', 'testing'], "Context must be either 'validation' or 'testing'"
