@@ -1,3 +1,7 @@
+The following is a list of all the experiments with their index.
+In the results folder there is a pdf file that has narrative resutls. Every experiment in that file has an index number.
+To see the results of an experiment, download the corresponding file from the list below.
+
 [1] Experiment_1 https://www.filefactory.com/file/6mjeb0qffyly/Experiment_1.rar
 [2] Experiment_2 https://www.filefactory.com/file/4bvv0z11wfme/Experiment%202.rar
 [3] Experiment_3 https://www.filefactory.com/file/54f7dk3jj7ak/Experiment%203.rar
@@ -10,6 +14,6 @@
 [8.2] Experiment_8.2 https://www.filefactory.com/file/2s2hcicbgmn4/Experiment_8.2.rar
 [9] Experiment_9 https://www.filefactory.com/file/64zva5e4p9u4/Experiment_9.rar
 [9.2] Experiment_9.2 https://www.filefactory.com/file/18k4pp1ktcwa/Experiment%209.2.rar
-[10] Experiment_10 https://www.filefactory.com/file/5ax2vn497m10/Experiment_10.rar
-[11] Experiment_11 https://www.filefactory.com/file/lk7pjg62bza/Experiment%2011.rar
-[12] Experiment_12 https://www.filefactory.com/file/6gg38x1le16m/Experiment%2012.rar
+[10] Experiment_10 https://www.filefactory.com/file/5800p6x7cevq/Experiment_10.rar
+[11] Experiment_11 https://www.filefactory.com/file/31sqb1jj91ig/Experiment_11.rar
+[12] Experiment_12 https://www.filefactory.com/file/4yqm9hy22hbe/Experiment_12.rar
