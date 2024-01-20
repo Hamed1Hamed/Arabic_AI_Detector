@@ -1,4 +1,4 @@
-
+# this is used for inference on the test set only.
 from itertools import product
 from ArabicTextDataset import ArabicTextDataset
 from transformers import AutoTokenizer
