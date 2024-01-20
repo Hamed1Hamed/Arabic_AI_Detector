@@ -89,12 +89,11 @@ class ArabicTextClassifier(nn.Module):
             self.logger.info("No best model checkpoint found.")
 
     def _create_scheduler(self):
-        # Custom scheduler with warmup
+        # Custom scheduler that combines linear warmup and cosine annealing
         main_lr = self.optimizer.param_groups[0]['lr']
         warmup_lr_lambda = lambda epoch: self.initial_learning_rate + (main_lr - self.initial_learning_rate) * (
                     epoch / self.warmup_epochs)
         cosine_annealing_lambda = lambda epoch: 0.5 * (1 + np.cos(np.pi * epoch / self.epochs))
-
         def combined_scheduler(epoch):
             if epoch < self.warmup_epochs:
                 return warmup_lr_lambda(epoch)
@@ -113,7 +112,7 @@ class ArabicTextClassifier(nn.Module):
             raise TypeError(
                 "train_loader, val_loader, and test_loader must be DataLoader instances.")
 
-        self.model.to(self.device) # Move model to the appropriate device
+        self.model.to(self.device)
 
         # # Initialize the scheduler
         # scheduler = CosineAnnealingLR(self.optimizer, T_max=len(train_loader) * self.epochs, eta_min=0)
@@ -123,14 +122,13 @@ class ArabicTextClassifier(nn.Module):
 
         for epoch in range(start_epoch, self.epochs):
             # Warm-up phase logic
-            self.model.train()  # Begin training
+            self.model.train()  # Set model to training mode
             total_train_loss = 0
             correct_train_preds = 0
             total_train_preds = 0
-            # Retrieve and log current learning rate
+            # Retrieve and log current learning rate, we sat it for debugging purposes
             current_lr = self.optimizer.param_groups[0]['lr']
             self.logger.info(f'Epoch {epoch + 1}/{self.epochs}, Current LR: {current_lr}')
-
             progress_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{self.epochs}", leave=True)
 
             for batch in progress_bar:
@@ -231,7 +229,7 @@ class ArabicTextClassifier(nn.Module):
                 total_loss += loss.item()
 
                 # Calculate probabilities from logits
-                probabilities = torch.softmax(logits, dim=1)[:, 1]
+                probabilities = torch.softmax(logits, dim=1)[:, 1] # we use softmax because we use cross entropy loss
                 y_scores.extend(probabilities.cpu().numpy())
 
                 predictions = torch.argmax(logits, dim=-1)
@@ -380,7 +378,6 @@ class ArabicTextClassifier(nn.Module):
         assert context in ['validation', 'testing'], "Context must be either 'validation' or 'testing'"
         self.logger.info(f'Plotting confusion matrix for {context}.')  # Log entry
 
-        # Define the labels for the confusion matrix
         classes = ['AI-generated', 'Human-written']
 
         # Compute confusion matrix
